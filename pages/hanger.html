@@ -1,8 +1,35 @@
 <!DOCTYPE html>
   <head>
     <title>Hanger App</title>
+    <meta charset = "UTF-8" />
+    <meta name = "viewport" content = "width = device-width, height = device-height, initial-scale = 1.0" />
+    <meta name = "keywords" content = "hanger,martina,pauer,Martina,Pauer,mp,MP,m,M,P,dailyhanggen,social,media,Social,Media,web,Web,flask,Flask,python,Python" />
+    <meta name = "author" content = "Martina Pauer" />  
   </head>
   <body>
-    
+    <header>Hanger</header>
+    <nav id = "hanger-app" name = "hanger-app">
+      <section id = "hanger-login" name = "hanger-login">
+        <form id = "login" name = "login" action = "hanger-app" method = "POST">
+          <input id = "hanger-user" name = "hanger-user" type = "text" />
+          <input id = "hanger-password" name = "hanger-password" type = "password" />
+          <input type = "submit" value = "Log In" />
+        </form>
+      </section>
+      <section id = "hanger-posts" name = "hanger-posts">
+        <!-- Squared posts for all the hanger users-->
+      </section>
+      <section id = "hanger-chat" name = "hanger-chat">
+        <form id = "chat" name = "chat" action = "chatting" method = "POST">
+          <textarea id = "message" name = "message" placeholder = "Chat..."></textarea>
+          <input id = "chat-image" name = "chat-image" type = "file" />
+          <input type = "submit" value = "send" />
+        </form>
+      </section>
+      <section id = "hanger-groups" name = "hanger-groups">
+        <!-- Group of selected hanger user for profile completing with server web app -->
+      </section>
+    </nav>
+    <footer>© 2026 Martina Pauer</footer>
   </body>
 </html>
