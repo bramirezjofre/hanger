@@ -47,3 +47,23 @@ class HangerSteps:
             Web For Make Registration
         '''
         self.new_user: user.Profile = user.Profile()
+        
+        self.contact: dict[str, str] = {}
+
+        self.app: user.HangerApp = user.HangerApp()
+
+    def register(self):
+        pass
+
+    def login(self, username: str, password: str):
+        '''
+            Log In user for use app
+        '''
+        pass
+
+    def password_recovery(self):
+        '''
+            Make New Password for user
+            registered with mail.
+        '''
+        pass

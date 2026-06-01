@@ -22,3 +22,12 @@ class Profile:
                             # Kind Contact to Contact Address
                             'contact': f'Use {self.value()[0]} To {self.key()[0]}'
                         }
+
+class HangerApp:
+
+    def __init__(self):
+        '''
+            Data about the flask app
+            for customization.
+        '''
+        pass
