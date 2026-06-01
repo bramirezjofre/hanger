@@ -1,3 +1,5 @@
+import user
+
 class loadUser:
     
     def __init__(self):
@@ -37,3 +39,11 @@ class loadUser:
             send steps later
         '''
         self.contacts.__setitem__(contact_address, kind)
+
+class HangerSteps:
+
+    def __init__(self):
+        '''
+            Web For Make Registration
+        '''
+        self.new_user: user.Profile = user.Profile()
