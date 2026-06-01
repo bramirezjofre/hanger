@@ -20,8 +20,10 @@ class Profile:
                             'name': self.name,
                             'age': self.age.__str__(),
                             # Kind Contact to Contact Address
-                            'contact': f'Use {self.value()[0]} To {self.key()[0]}'
+                            'contact': f'Use {list(self.contact.values())[0]} To {list(self.contact.keys())[0]}'
                         }
+
+        return data
 
 class HangerApp:
 
