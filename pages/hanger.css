@@ -54,10 +54,16 @@ footer, header
 
 h3
 {
-    color: #55dfdf;
+    color: #55DFDF;
 }
 
 .comment
 {
     border: 3px solid black;
+}
+
+.post
+{
+    background: #50FF7F;
+    color: #290000;
 }

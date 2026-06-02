@@ -25,6 +25,43 @@ class Profile:
 
         return data
 
+class HangerPost:
+    
+    def __init__(self):
+        '''
+            Define Data For User
+            Post and give HTML view
+        '''
+        self.content: str = ''
+
+        self.images: list[str] = []
+
+        self.comments: list[str] = []
+
+        self.likes: int = 0
+
+    def give_HTML(self, style: str) -> str:
+        '''
+            Give HTML text with style to use
+        '''
+        text: str = '<!DOCTYPE html>\n\t<head>\n\t\t<title>Hanger Post</title>\n\t\t'
+        text += f'<link rel = stylesheet href = https://github.com/martina-pauer/hanger/raw/9e8346cbf22d9632faf299d03287df097b460d5c/pages/{style} />\n\t'
+        text += '</head>\n\t'
+        text += '<body>\n\t\t'
+        # Post Generation Start
+        text += f'<div class = post>{self.content}'
+        for image in self.images:
+            text += f'<img src = https://github.com/martina-pauer/hanger/blob/9e8346cbf22d9632faf299d03287df097b460d5c/pages/{image} alt = "Post Image"/>'
+        text += '</div>\n'
+        # Post Generation End
+        # Add Comments
+        text += '\n\t\t<div class = comment>'
+        for comment in self.comments:
+            text += comment
+        text += '\n\t\t</div>\n\t</body>\n</html>'
+
+        return text
+
 class HangerApp:
 
     def __init__(self):
