@@ -54,7 +54,6 @@ class HangerMessage:
         # Clear from unneeded data
         del message, origin, destiny
         
-
 class HangerPost:
     
     def __init__(self):
