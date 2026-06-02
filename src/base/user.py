@@ -74,7 +74,12 @@ class HangerPost:
             Give HTML text with style to use
         '''
         text: str = '<!DOCTYPE html>\n\t<head>\n\t\t<title>Hanger Post</title>\n\t\t'
-        text += f'<link rel = stylesheet href = https://github.com/martina-pauer/hanger/raw/main/pages/{style} />\n\t'
+        style_text: str = ''
+        with open(f'/workspaces/hanger/pages/{style}', 'r') as handler:
+            for line in handler.readlines():
+                style_text += line
+        text += f'<style>{style_text}</style>\n\t'
+        del style_text
         text += '</head>\n\t'
         text += '<body>\n\t\t'
         # Post Generation Start

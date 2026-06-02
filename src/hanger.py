@@ -86,14 +86,15 @@ def chat() -> str:
     messages: str = f'<h1>From {chatter.sender.name} To {chatter.receiver.name}</h1>'
     
     chat_images.append(request.form['chat-image'])
+    
     chatter.send(request.form['message'], chat_images)
     
     for message in chatter.chat_messages:
         messages += message
             
     render = base.user.HangerPost()
-    render.content += chatter.chat_messages[0]
+    render.content = ''.join(chatter.chat_messages)
     render.images = chat_images
-    messages = render.give_HTML('hanger.css')
+    messages += render.give_HTML('hanger.css')
     
     return messages
