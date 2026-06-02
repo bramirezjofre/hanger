@@ -74,13 +74,13 @@ class HangerPost:
             Give HTML text with style to use
         '''
         text: str = '<!DOCTYPE html>\n\t<head>\n\t\t<title>Hanger Post</title>\n\t\t'
-        text += f'<link rel = stylesheet href = https://github.com/martina-pauer/hanger/raw/9e8346cbf22d9632faf299d03287df097b460d5c/pages/{style} />\n\t'
+        text += f'<link rel = stylesheet href = https://github.com/martina-pauer/hanger/raw/main/pages/{style} />\n\t'
         text += '</head>\n\t'
         text += '<body>\n\t\t'
         # Post Generation Start
         text += f'<div class = post>{self.content}'
         for image in self.images:
-            text += f'<img src = https://github.com/martina-pauer/hanger/blob/9e8346cbf22d9632faf299d03287df097b460d5c/pages/{image} alt = "Post Image"/>'
+            text += f'<br /><img src = "https://github.com/martina-pauer/hanger/raw/main/pages/images/users/{image}" alt = "Post Image"/><br />'
         text += '</div>\n'
         # Post Generation End
         # Add Comments

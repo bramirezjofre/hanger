@@ -57,6 +57,12 @@ h3
     color: #55DFDF;
 }
 
+img
+{
+    width: 20em;
+    height: 14em;
+}
+
 .comment
 {
     border: 3px solid black;
