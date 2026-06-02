@@ -32,4 +32,39 @@ class HangerApp:
             Data about the flask app
             for customization.
         '''
-        pass
+        self.title: str = 'Hanger Social Media'
+
+        self.domain: str = '.app.github.dev'
+
+        self.icon: str = '/workspaces/pages/images/hanger_june_second.svg'
+
+        self.logged_user: Profile = Profile()
+
+    def run(self, title: str, domain: str, icon: str):
+        '''
+            Start Flask App with first word
+            in lower letters as name
+        '''
+        # Start App
+        import os
+        os.system(f'flask --app {title.split(' ')[0].lower()} run')
+        del os
+        # Update All Data In The Object With Parameters
+        self.title = title
+        self.domain = domain
+        self.icon = icon
+
+    def upload_post(post: HangerPost):
+        '''
+            Use generated post and write 
+            post to post folders for 
+            could be shows to every user.
+        '''
+        # Make An Original and Predictible name for post page
+        upload = open(f'post_{hash(post)}.html', 'w')
+
+        upload.write(post.give_HTML('hanger.css'))
+
+        upload.close()
+
+        del upload
