@@ -54,7 +54,7 @@ class HangerApp:
         self.domain = domain
         self.icon = icon
 
-    def upload_post(post: HangerPost):
+    def upload_post(self, post: HangerPost):
         '''
             Use generated post and write 
             post to post folders for 
@@ -68,3 +68,33 @@ class HangerApp:
         upload.close()
 
         del upload
+
+    def send_message(self, receiver: Profile):
+        '''
+            Chat With An User
+        '''
+        pass
+
+    def make_group(self, members: list[Profile]):
+        '''
+            Use Many Profile objects for
+            create a chat group with many
+            users.
+        '''
+        pass
+
+    def give_like(self, post: HangerPost):
+        '''
+            Increase like counting 
+            for post analising 
+            and recomendations.
+        '''
+        # Leave of this way for simplicity (One User Could give more likes to same post)
+        post.likes += 1
+
+    def write_comment(self, content: HangerPost):
+        '''
+            Add New Comment To 
+            post comments list.
+        '''
+        content.comments.append(f'<h3>{self.logged_user.name}<h3><div class = "comment">{content.give_HTML('hanger.css')}</div')

@@ -1,0 +1,63 @@
+*
+{
+    text-align: center;
+    font-family: sans-serif;
+    padding: 1em;
+}
+
+h1, h2
+{
+    color: navy;
+}
+
+form
+{
+    background: navy;
+}
+
+input
+{
+    background: #55dfdf;
+    color: darkred;
+}
+
+input:hover
+{
+    transition: 1s linear;
+    background: darkred;
+    color: #55dfdf;
+}
+
+textarea
+{
+    background: darkred;
+    color: #55dfdf;
+}
+
+nav
+{
+    background: white;
+    border-color: black;
+}
+
+section
+{
+    border-color: white;
+    background: black;
+}
+
+footer, header
+{
+    padding: 2em;
+    width: 100%;
+}
+
+h3
+{
+    color: #55dfdf;
+}
+
+.comment
+{
+    border: 3px solid black;
+}
