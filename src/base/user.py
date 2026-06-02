@@ -25,6 +25,36 @@ class Profile:
 
         return data
 
+class HangerMessage:
+    
+    def __init__(self):
+        '''
+            Chat Between users
+        '''
+        self.sender: Profile = Profile()
+
+        self.receiver: Profile = Profile()
+
+        self.chat_messages: list[str] = []
+
+        self.chat_images: list[str] = []
+
+    def send(self, chat: str, images: list[str]):
+        '''
+            Send Message from sender
+            to receiver
+        '''
+        message: str = f'<span>{chat}</span><br />'
+        origin: str = list(self.sender.contact.keys())[0]
+        destiny: str = list(self.receiver.contact.keys())[0]
+        # Add Message
+        self.chat_messages.extend(chat)
+        # Add Images
+        self.chat_images.extend(images)
+        # Clear from unneeded data
+        del message, origin, destiny
+        
+
 class HangerPost:
     
     def __init__(self):
