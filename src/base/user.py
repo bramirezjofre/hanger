@@ -140,11 +140,15 @@ class HangerApp:
 
         del upload
 
-    def send_message(self, receiver: Profile):
+    def send_message(self, rec: Profile):
         '''
-            Chat With An User
+            Chat With An Receiver User
         '''
-        pass
+        chat: HangerMessage = HangerMessage()
+        chat.sender = self.logged_user
+        chat.receiver = rec
+        # This Works Because Will Be Used in 'hanger.py' Context
+        chat.send(request.form['chat-image'], chat_images) 
 
     def make_group(self, members: list[Profile]):
         '''
@@ -152,7 +156,9 @@ class HangerApp:
             create a chat group with many
             users.
         '''
-        pass
+        for member in members:
+            # Send The Sama Message From An User To All
+            self.send_message(member)
 
     def give_like(self, post: HangerPost):
         '''
