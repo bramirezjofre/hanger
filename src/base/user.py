@@ -105,7 +105,7 @@ class HangerApp:
         '''
         self.title: str = 'Hanger Social Media'
 
-        self.domain: str = '.app.github.dev'
+        self.domain: str = 'https://ominous-system-r464rw6444pp3pgxg-5000.app.github.dev'
 
         self.icon: str = '/workspaces/pages/images/hanger_june_second.svg'
 

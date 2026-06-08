@@ -1,5 +1,7 @@
 import user
 
+web: user.HangerApp = user.HangerApp()
+
 class loadUser:
     
     def __init__(self):
@@ -45,13 +47,21 @@ class loadUser:
                     back.login(hanger_no_reply, password.decode('utf-32'))
                     del password
                     # Send Mail With Next Steps
-                    back.sendmail(hanger_no_reply, self.contacts[contact])
+                    back.sendmail(hanger_no_reply, self.contacts[contact], f'<div><h1>Hanger Registration Steps</h1><a href = "{web.domain}/hangerSteps.html"></a></div>')
 
                 
             elif contact.__contains__('tel'):
-                pass
+                #import SMS SUPPORT
+                # Send SMS when the internet is off
+                f'Register to Hanger Social Media in {web.domain}/hangerSteps.html'
             elif contact == 'ig':
-                pass
+                 #import Meta Instagram API for send messages in the chat
+                 hangerIg: str = '@hanger.social'
+                 first_msg: str = f'Register to Hanger Social Media in Next Link...'
+                 second_msg: str = f'{web.domain}/hangerSteps.html'
+                 for user in self.contacts:
+                     userIg: str = self.contacts[user]
+                     # Use send message from Hanger instagram to selected user chat
             
             del address
 
