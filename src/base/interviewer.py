@@ -51,9 +51,20 @@ class loadUser:
 
                 
             elif contact.__contains__('tel'):
-                #import SMS SUPPORT
-                # Send SMS when the internet is off
-                f'Register to Hanger Social Media in {web.domain}/hangerSteps.html'
+                from twilio.rest import Client
+                
+                message_text: str = f'Register to Hanger Social Media in {web.domain}/hangerSteps.html'
+                # Complete with twilio account data
+                account_sid: str = ''
+                auth_token: str = ''
+                twilio_phone: str = ''
+                # Send Messages
+                twilio_client: Client = Client(account_sid, auth_token)
+                sender = twilio_client.messages.create  (
+                                                            body = message_text,
+                                                            FROM = twilio_phone,
+                                                            to = address
+                                                        )
             elif contact == 'ig':
                  #import Meta Instagram API for send messages in the chat
                  hangerIg: str = '@hanger.social'
