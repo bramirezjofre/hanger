@@ -87,32 +87,43 @@ class loadUser:
                                                                                                                 )
                                                                             )
                  user_bot.send_keys(hangerIg)
-                 
+                 del user_bot, hangerIg
                  password_bot = navigator.find_element  (
                                                             By.XPATH,
                                                             "*[id = 'loginForm&']/div/div[2]/div/label/input"
                                                         )
                  password_bot.send_keys(hangerPass)
+                 del password_bot, hangerPass
                  # Simulate keyboard button pulsation
                  enter = navigator.find_element (
                                                     By.XPATH,
                                                     "//*[@id = 'loginFrom&']/div/div[3]/label/input"
                                                 )
                  enter.click()
+                 del enter
                  # Unable Pop-Up Window
                  disable = navigator.find_element   (
                                                         By.CSS_SELECTOR,
                                                         '._a9_1'
                                                     )
                  disable.click()
+                 del disable
                  # Send message to users with link for continue the registration
                  for user in self.contacts:
                      userIg: str = self.contacts[user]
                      # Use send message from Hanger instagram to selected user chat
                      for messages_text in [first_msg, second_msg]:
-                         pass
-            
-            del address
+                         user_chat = navigator.find_element (
+                                                                By.CSS_SELECTOR,
+                                                                'input[type = "text"]'
+                                                            )
+                         user_chat.send_keys(message_text)
+                         # Clean memory after each iterations
+                         del user_chat
+                     # Clean memory for get free to don't use many RAM
+                     del userIg
+            # Free Out RAM for Get More
+            del selenium, contact, address, navigator, first_msg, second_msg
 
     def add_user(self, kind: str, contact_address: str):
         '''
