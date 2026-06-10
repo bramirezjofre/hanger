@@ -67,12 +67,50 @@ class loadUser:
                                                         )
             elif contact == 'ig':
                  #import Meta Instagram API for send messages in the chat
-                 hangerIg: str = '@hanger.social'
+                 from selenium import webdriver
+                 from selenium.webdriver.common.by import By
+                 from selenium.webdriver.common.keys import Keys
+                 from selenium.webdriver.support.wait import WebDriverWait
+                 # Configuration of Bot
+                 hangerIg: str = '@'
+                 hangerPass: str = ''
                  first_msg: str = f'Register to Hanger Social Media in Next Link...'
                  second_msg: str = f'{web.domain}/hangerSteps.html'
+                 # Navigator Simulation
+                 navigator = webdriver.Chrome()
+                 navigator.get(f'https://www.instagram.com/accounts/login/?next=https://www.instagram.com/&;;//&is_from_rle')
+                 # Login in instagram
+                 user_bot = WebDriverWait(navigator, timeout = 60).until   (
+                                                                                lambda form: form.find_element  (
+                                                                                                                    By.XPATH,
+                                                                                                                    "//*[@id = 'loginForm&']/div/div[1]/div/label/input"
+                                                                                                                )
+                                                                            )
+                 user_bot.send_keys(hangerIg)
+                 
+                 password_bot = navigator.find_element  (
+                                                            By.XPATH,
+                                                            "*[id = 'loginForm&']/div/div[2]/div/label/input"
+                                                        )
+                 password_bot.send_keys(hangerPass)
+                 # Simulate keyboard button pulsation
+                 enter = navigator.find_element (
+                                                    By.XPATH,
+                                                    "//*[@id = 'loginFrom&']/div/div[3]/label/input"
+                                                )
+                 enter.click()
+                 # Unable Pop-Up Window
+                 disable = navigator.find_element   (
+                                                        By.CSS_SELECTOR,
+                                                        '._a9_1'
+                                                    )
+                 disable.click()
+                 # Send message to users with link for continue the registration
                  for user in self.contacts:
                      userIg: str = self.contacts[user]
                      # Use send message from Hanger instagram to selected user chat
+                     for messages_text in [first_msg, second_msg]:
+                         pass
             
             del address
 
