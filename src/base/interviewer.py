@@ -21,10 +21,10 @@ class loadUser:
             steps of different way with link to
             registration flask web app
         '''
-        for contact in self.contacts.values():
+        for contact in self.contacts.keys():
             
-            contact: str = contact.lower()
-            address: str = self.contacts[contact]
+            address: str = contact.lower()
+            contact: str = self.contacts[address].lower()
             
             if contact.__contains__('mail'):
                 # RFC 821 Standard
@@ -47,9 +47,7 @@ class loadUser:
                     back.login(hanger_no_reply, password.decode('utf-32'))
                     del password
                     # Send Mail With Next Steps
-                    back.sendmail(hanger_no_reply, self.contacts[contact], f'<div><h1>Hanger Registration Steps</h1><a href = "{web.domain}/hangerSteps.html"></a></div>')
-
-                
+                    back.sendmail(hanger_no_reply, address, f'<div><h1>Hanger Registration Steps</h1><a href = "{web.domain}/hangerSteps.html"></a></div>')      
             elif contact.__contains__('tel'):
                 from twilio.rest import Client
                 
@@ -109,8 +107,8 @@ class loadUser:
                  disable.click()
                  del disable
                  # Send message to users with link for continue the registration
-                 for user in self.contacts:
-                     userIg: str = self.contacts[user]
+                 for user in self.contacts.keys():
+                     userIg: str = user.lower()
                      # Use send message from Hanger instagram to selected user chat
                      for messages_text in [first_msg, second_msg]:
                          user_chat = navigator.find_element (
@@ -130,7 +128,9 @@ class loadUser:
             Add a New Contact to Contacts list for
             send steps later
         '''
-        self.contacts.__setitem__(contact_address, kind)
+        if (self.contacts.__contains__(contact_address) == False):
+            # Only Add New Contacts
+            self.contacts.__setitem__(contact_address, kind)
 
 class HangerSteps:
 
