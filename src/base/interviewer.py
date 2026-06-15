@@ -144,6 +144,13 @@ class HangerSteps:
 
         self.app: user.HangerApp = user.HangerApp()
 
+
+    def valid(self, text: str) -> bool:
+        '''
+            Said if a password is or not valid
+        '''
+        return text.isalnum()
+    
     def register(self):
         
         # Flask App for Sign Up New User
@@ -205,4 +212,19 @@ class HangerSteps:
             Make New Password for user
             registered with mail.
         '''
-        pass
+                # Save In DataBase
+        import sqlite3
+        
+        sql_pointer = sqlite3.connect('registered_users.db')
+        sql_engine = sql_pointer.cursor()
+        # SQL DataBase Transaction For Create User
+        new_password: str = ''
+        before_password: str = sql_engine.execute('SELECT password FROM hanger_register;')
+        sql_pointer.commit()
+        while ((not self.valid(new_password)) or (new_password == before_password)):
+            pass
+        del user_name, passed
+        # Close And Clean (Transaction End)
+        sql_engine.close()
+        sql_pointer.close()
+        del sql_engine, sql_pointer
