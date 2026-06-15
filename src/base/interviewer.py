@@ -151,7 +151,33 @@ class HangerSteps:
         '''
             Log In user for use app
         '''
-        pass
+        import sqlite3
+        # Make inside to class for don't access from external objects by security
+        sql_pointer = sqlite3.connect('registered_users.db')
+        sql_engine = sql_pointer.cursor()
+        # Must Be Exist One User with that name and password
+        import hashlib
+        password: str = hashlib.sha3_256(password.encode('UTF-8')).hexdigest()
+        answer = sql_engine.execute(f'SELECT user WHERE word = {password} AND user = {username} FROM hanger_register;')
+        del hashlib
+        answer: int = answer.rowcount
+        self.new_user.name = username
+        del password, username
+        # Complete Database Transaction and clean memory
+        sql_pointer.commit()
+        sql_engine.close()
+        sql_pointer.close()
+        del sql_engine, sql_pointer
+        # Log when The password and The user is valid
+        if (answer == 1):
+            # Log User
+            del answer
+            self.app.logged_user = self.new_user
+            self.app.run(self.app.title, self.app.domain, self.app.icon)
+        else:
+            # Show mistake to user
+            del answer
+            print('<h1>The User With That password isn\'t valid</h1>')
 
     def password_recovery(self):
         '''
