@@ -145,7 +145,28 @@ class HangerSteps:
         self.app: user.HangerApp = user.HangerApp()
 
     def register(self):
-        pass
+        
+        # Flask App for Sign Up New User
+        from flask import Flask
+        # Get username and password
+        user_name: str = ''
+        passed: str = ''
+        # Clean Memory For Load Next Module without Use More Memory
+        del Flask
+        # Save In DataBase
+        import sqlite3
+        
+        sql_pointer = sqlite3.connect('registered_users.db')
+        sql_engine = sql_pointer.cursor()
+        # SQL DataBase Transaction For Create User
+        sql_engine.execute('CREATE TABLE hanger_register(user varchar, password varchar);')
+        sql_engine.execute(f'INSERT INTO hanger_register VALUES ({user_name}, {passed});')
+        sql_pointer.commit()
+        del user_name, passed
+        # Close And Clean (Transaction End)
+        sql_engine.close()
+        sql_pointer.close()
+        del sql_engine, sql_pointer
 
     def login(self, username: str, password: str):
         '''
