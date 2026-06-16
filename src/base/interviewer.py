@@ -167,11 +167,28 @@ class HangerSteps:
         
         # Flask App for Sign Up New User
         from flask import Flask
+        regstep = Flask(__name__)
         # Get username and password
         user_name: str = ''
         passed: str = ''
+        # Decorator For Render Web Page 'hangerSteps.html' and get data
+        @regstep.route('hangerSteps', methods = ['GET'])
+        def initial_page() -> str:
+            HyperText: str = ''
+            with open('hangerSteps.html', 'r') as document:
+                for line in document.readlines():
+                    HyperText += line
+                        
+            return HyperText
+        from hanger import register_ends
+        @regstep.route('registered', methods = ['POST'])
+        def render() -> str:
+            return register_ends
+        del register_ends
+        # form id: registerUser
+        # input ids: userName, userPassword, userAge, userContact, userKind
         # Clean Memory For Load Next Module without Use More Memory
-        del Flask
+        del regstep, Flask
         # Save In DataBase
         import sqlite3
         
