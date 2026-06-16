@@ -240,7 +240,7 @@ class HangerSteps:
 
             render_page_decorator = Flask(__name__)
 
-            @render_page_decorator.route('/invalid-password', ['POST'])
+            @render_page_decorator.route('/registered', ['POST'])
             def invalid_password() -> str:
                 return '<h1>The User With That password isn\'t valid</h1>'
 
@@ -256,12 +256,17 @@ class HangerSteps:
         sql_engine = sql_pointer.cursor()
         # SQL DataBase Transaction For Create User
         new_password: str = ''
-        before_password: str = sql_engine.execute('SELECT password FROM hanger_register;')
+        before_password: str = sql_engine.execute(f'SELECT password FROM hanger_register WHERE {self.app.logged_user.name};')
         sql_pointer.commit()
-        while ((not self.valid(new_password)) or (new_password == before_password)):
-            pass
-        del user_name, passed
         # Close And Clean (Transaction End)
         sql_engine.close()
         sql_pointer.close()
-        del sql_engine, sql_pointer
+        del sql_engine, sql_pointer, sqlite3
+        # Form To Override Password
+        from flask import Flask, request
+        while ((not self.valid(new_password)) or (new_password == before_password)):
+            # Get From Password Page
+            with open('/workspaces/page', 'r') as over:
+                pass
+
+        del Flask, request
