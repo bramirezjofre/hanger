@@ -172,7 +172,7 @@ class HangerSteps:
         user_name: str = ''
         passed: str = ''
         # Decorator For Render Web Page 'hangerSteps.html' and get data
-        @regstep.route('hangerSteps', methods = ['GET'])
+        @regstep.route('/hangerSteps', methods = ['GET'])
         def initial_page() -> str:
             HyperText: str = ''
             with open('hangerSteps.html', 'r') as document:
@@ -213,18 +213,19 @@ class HangerSteps:
         sql_pointer = sqlite3.connect('registered_users.db')
         sql_engine = sql_pointer.cursor()
         # Must Be Exist One User with that name and password
+        self.new_user.name = username
         import hashlib
+        username: str = hashlib.sha3_256(username.encode('UTF-8')).hexdigest()
         password: str = hashlib.sha3_256(password.encode('UTF-8')).hexdigest()
         answer = sql_engine.execute(f'SELECT user WHERE word = {password} AND user = {username} FROM hanger_register;')
-        del hashlib
+        # Clean Memory From Uneed data from Last to First for don't broke RAM
+        del password, username, hashlib
         answer: int = answer.rowcount()
-        self.new_user.name = username
-        del password, username
         # Complete Database Transaction and clean memory
         sql_pointer.commit()
         sql_engine.close()
         sql_pointer.close()
-        del sql_engine, sql_pointer
+        del sql_engine, sql_pointer, sqlite3
         # Log when The password and The user is valid
         if (answer == 1):
             # Log User
@@ -234,7 +235,14 @@ class HangerSteps:
         else:
             # Show mistake to user
             del answer
-            print('<h1>The User With That password isn\'t valid</h1>')
+            # Flask Decorator For Render Error Page
+            from flask import Flask
+
+            render_page_decorator = Flask(__name__)
+
+            @render_page_decorator.route('/invalid-password', ['POST'])
+            def invalid_password() -> str:
+                return '<h1>The User With That password isn\'t valid</h1>'
 
     def password_recovery(self):
         '''
