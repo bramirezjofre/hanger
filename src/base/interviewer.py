@@ -217,7 +217,7 @@ class HangerSteps:
         password: str = hashlib.sha3_256(password.encode('UTF-8')).hexdigest()
         answer = sql_engine.execute(f'SELECT user WHERE word = {password} AND user = {username} FROM hanger_register;')
         del hashlib
-        answer: int = answer.rowcount
+        answer: int = answer.rowcount()
         self.new_user.name = username
         del password, username
         # Complete Database Transaction and clean memory
