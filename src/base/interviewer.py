@@ -143,13 +143,25 @@ class HangerSteps:
         self.contact: dict[str, str] = {}
 
         self.app: user.HangerApp = user.HangerApp()
-
-
+        
     def valid(self, text: str) -> bool:
         '''
             Said if a password is or not valid
         '''
-        return text.isalnum()
+        validation: bool = False
+
+        for validate in text:
+            if (validate.isupper() and (validate != text[0])):
+                # Must Be Have At least One Upper
+                validation: bool = ((not validation) and True)
+                break
+            else:
+                # But Not All Must Be Upper
+                validation: bool = False
+        # Must Have Upper and Lower Case With Numbers and Symbols Nor Letters Neither Numbers        
+        validation: bool = (validation and (text.isalnum() or not (text.isalpha and text.isnumeric)))
+                    
+        return validation
     
     def register(self):
         
