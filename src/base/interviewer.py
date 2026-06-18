@@ -264,9 +264,10 @@ class HangerSteps:
         del sql_engine, sql_pointer, sqlite3
         # Form To Override Password
         from flask import Flask, request
+        
         while ((not self.valid(new_password)) or (new_password == before_password)):
             # Get From Password Page
-            with open('/workspaces/page', 'r') as over:
+            with open('/workspaces/pages/recovery-password.html', 'r') as over:
                 pass
 
         del Flask, request
