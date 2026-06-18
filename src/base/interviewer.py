@@ -252,22 +252,44 @@ class HangerSteps:
                 # Save In DataBase
         import sqlite3
         
+        user_name = self.app.logged_user.name
+        
         sql_pointer = sqlite3.connect('registered_users.db')
         sql_engine = sql_pointer.cursor()
         # SQL DataBase Transaction For Create User
         new_password: str = ''
-        before_password: str = sql_engine.execute(f'SELECT password FROM hanger_register WHERE {self.app.logged_user.name};')
+        before_password: str = sql_engine.execute(f'SELECT password FROM hanger_register WHERE {user_name};')
         sql_pointer.commit()
-        # Close And Clean (Transaction End)
-        sql_engine.close()
-        sql_pointer.close()
-        del sql_engine, sql_pointer, sqlite3
         # Form To Override Password
         from flask import Flask, request
+        import os
+        
+        page_HTML: str = ''
+        
+        recovery = Flask(__name__)
         
         while ((not self.valid(new_password)) or (new_password == before_password)):
             # Get From Password Page
             with open('/workspaces/pages/recovery-password.html', 'r') as over:
-                pass
-
-        del Flask, request
+                for tag in over.readlines():
+                    page_HTML += tag
+                    
+            @recovery.route('/password-recovery', methods = ['GET', 'POST'])
+            def recovering() -> str:
+                if request.method == 'POST':
+                    if (self.valid(request.form['new-password']) and (request.form['new-password'] == request.form['retype-pass'])):
+                        new_password = request.form['new-password']
+                        sql_engine.execute(f'UPDATE password = {new_password} WHERE user = {user_name};')
+                        sql_pointer.commit()
+                        return f'<h1>New Password Set Up Right for {user_name}.</h1>'
+                    else:
+                        return f'<h1>Password Invalid</h1>{page_HTML}'
+                else:
+                    return page_HTML
+                
+        # Close And Clean (Transaction Database End)
+        sql_engine.close()
+        sql_pointer.close()
+        del sql_engine, sql_pointer, sqlite3
+        # Start Flask Web App
+        os.system(f'flask --app {__name__} run')
