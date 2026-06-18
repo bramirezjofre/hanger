@@ -44,7 +44,7 @@ class HangerMessage:
             Send Message from sender
             to receiver
         '''
-        message: str = f'<span>{chat}</span><br />'
+        message: str = '<div>'
         origin: str = list(self.sender.contact.keys())[0]
         destiny: str = list(self.receiver.contact.keys())[0]
         # Add Message
@@ -53,6 +53,26 @@ class HangerMessage:
         self.chat_images.extend(images)
         # Clear from unneeded data
         del message, origin, destiny
+        # Show Messages
+        for text in self.chat_messages:
+            message += f'<div><span>{text}</span><br />'
+            del text
+            for image in self.chat_images:
+                message += f'<img src = "pages/images/{image}"></div>'
+                # Clean Memory For Save To The Loops Iterations
+                del image
+        message += '</div>'
+        # Show New Message in front end
+        from flask import Flask, request
+        
+        chatting = Flask(__name__)
+        
+        @chatting.route('/chatting', methods = ['GET', 'POST'])
+        def chat_room() -> str:
+            if request.method == 'POST':
+                return message
+            else:
+                return '<hr />'
         
 class HangerPost:
     
