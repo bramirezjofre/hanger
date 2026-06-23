@@ -1,3 +1,27 @@
-# hanger
-An social media with selected people using sign up interview. First make Interview by Google Meet for research about the person elegibility, later ask by contact info and send step for continue with the registration. The scoail media will based and text and image simple but informative.
-![Hanger UML Objects Structure](hanger_29_may_2026.png)
+# Hanger
+
+Hanger is an interview-gated social application built with Flask. It includes
+registration, login, password recovery, persistent invitations, messaging,
+posts, validated image uploads, and a retryable delivery queue.
+
+## Local setup
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev]'
+flask --app hanger:web run --debug
+```
+
+Development data is stored under `instance/`. Production requires
+`HANGER_SECRET_KEY` and `HANGER_ADMIN_TOKEN`; configure SMTP or Twilio
+credentials before processing delivery jobs.
+
+```bash
+flask --app hanger:web process-jobs --limit 100
+pytest -q
+ruff check src tests
+```
+
+Schema changes belong in numbered SQL files under `migrations/` and are applied
+automatically when the application factory starts.

@@ -20,6 +20,7 @@ registered_users.db
 *.db-journal
 post_*.html
 *.log
+instance/
 
 # Coverage and build artifacts
 .coverage
