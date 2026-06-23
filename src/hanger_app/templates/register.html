@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Register</title></head>
+<body><h1>Register</h1>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input name="username" required autocomplete="username">
+    <input name="age" type="number" min="1" max="130">
+    <select name="contact_kind"><option value="email">Email</option><option value="sms">SMS</option></select>
+    <input name="contact_address" required>
+    <input name="password" required type="password" autocomplete="new-password">
+    <input name="password_confirmation" required type="password" autocomplete="new-password">
+    <button type="submit">Register</button>
+  </form>
+</body></html>

@@ -1,0 +1,37 @@
+from dataclasses import dataclass
+from typing import Optional
+
+
+@dataclass(frozen=True)
+class User:
+    id: int
+    username: str
+    password_hash: str
+    age: Optional[int]
+    contact_kind: Optional[str]
+    contact_address: Optional[str]
+
+
+@dataclass(frozen=True)
+class Job:
+    id: int
+    kind: str
+    payload: dict
+    attempts: int
+
+
+@dataclass(frozen=True)
+class Message:
+    id: int
+    sender: str
+    receiver: str
+    content: str
+    created_at: int
+
+
+@dataclass(frozen=True)
+class Post:
+    id: int
+    author: str
+    content: str
+    created_at: int

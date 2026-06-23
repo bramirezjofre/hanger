@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Hanger</title></head>
+  <body>
+    <h1>Hanger</h1>
+    {% if session.username %}
+      <p>Signed in as {{ session.username }}</p>
+      <form method="post" action="{{ url_for('hanger.logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit">Log out</button>
+      </form>
+      <form method="post" action="{{ url_for('hanger.create_post') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <textarea name="content" required></textarea>
+        <button type="submit">Post</button>
+      </form>
+      <form method="post" action="{{ url_for('hanger.chat') }}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input name="receiver" required placeholder="Receiver">
+        <textarea name="message" required></textarea>
+        <input type="file" name="chat_image" accept="image/png,image/jpeg,image/gif,image/webp">
+        <button type="submit">Send</button>
+      </form>
+    {% else %}
+      <form method="post" action="{{ url_for('hanger.login') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input name="username" required autocomplete="username">
+        <input name="password" required type="password" autocomplete="current-password">
+        <button type="submit">Log in</button>
+      </form>
+      <a href="{{ url_for('hanger.register') }}">Register</a>
+    {% endif %}
+    <section>
+      {% for post in posts %}
+        <article><h2>{{ post.author }}</h2><p>{{ post.content }}</p></article>
+      {% endfor %}
+    </section>
+  </body>
+</html>

@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Python application code lives in `src/`. `src/hanger.py` defines the main Flask application, while `src/loader.py` handles interviewer-driven user loading. Shared domain objects and workflows are in `src/base/user.py` and `src/base/interviewer.py`. Static HTML, CSS, and images live under `pages/`; keep generated or user-uploaded content out of version control. Tests live in `tests/` and mirror the source modules. Agent instructions are stored in `.agents/skills/`, with installed versions recorded in `skills-lock.json`.
+Python application code lives in `src/hanger_app/`. `__init__.py` owns the Flask factory, `routes.py` handles HTTP, `services.py` contains use cases, and `repositories.py` isolates SQLite. Versioned schema files live in `migrations/`; Jinja templates live in `src/hanger_app/templates/`. `src/hanger.py` and `src/loader.py` are compatibility entry points. Tests live in `tests/`. Agent instructions are stored in `.agents/skills/`, with installed versions recorded in `skills-lock.json`.
 
 ## Build, Test, and Development Commands
 
@@ -11,7 +11,7 @@ Create an isolated environment before installing dependencies:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install flask pytest ruff
+pip install -e '.[dev]'
 ```
 
 Run the main application from the repository root:
@@ -20,7 +20,7 @@ Run the main application from the repository root:
 PYTHONPATH=src flask --app hanger:web run --debug
 ```
 
-Run `PYTHONPATH=src flask --app loader:loads run --debug` for the loader application. Use `python3 -m compileall -q src` as the minimum syntax check. The project has no dependency manifest yet, so document any additional packages required by a change.
+Run `flask --app hanger:web process-jobs --limit 100` to process queued deliveries. Use `python3 -m compileall -q src tests` as the minimum syntax check. Add schema changes as a new numbered file in `migrations/`; never rewrite an applied migration.
 
 ## Coding Style & Naming Conventions
 
