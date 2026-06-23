@@ -44,7 +44,7 @@ def register_ends() -> str:
 
 @web.route('/load', methods = ['POST'])
 def load_ends() -> str:
-    users.append(f'<li>{request.form['contact']}</li>')
+    users.append(f"<li>{request.form['contact']}</li>")
     
     return f'<or>{users}</ol>'
 
