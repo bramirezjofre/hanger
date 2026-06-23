@@ -1,134 +1,97 @@
+import html
+import subprocess
+from pathlib import Path
+from typing import List, Optional
+from urllib.parse import quote
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PAGES_DIR = PROJECT_ROOT / "pages"
+
+
 class Profile:
-
     def __init__(self):
-        '''
-            Strtucture user
-            data
-        '''
-        self.name: str = 'New'
-        
+        self.name: str = "New"
         self.age: int = 0
-
         self.contact: dict[str, str] = {}
 
     def get_data(self) -> dict[str, str]:
-        '''
-            Give user data as a dict 
-            for could be used as JSON
-        '''
-        data: dict  =   {
-                            'name': self.name,
-                            'age': self.age.__str__(),
-                            # Kind Contact to Contact Address
-                            'contact': f'Use {list(self.contact.values())[0]} To {list(self.contact.keys())[0]}'
-                        }
+        contact = ""
+        if self.contact:
+            kind, address = next(iter(self.contact.items()))
+            contact = f"Use {address} To {kind}"
+        return {
+            "name": self.name,
+            "age": str(self.age),
+            "contact": contact,
+        }
 
-        return data
 
 class HangerMessage:
-    
     def __init__(self):
-        '''
-            Chat Between users
-        '''
         self.sender: Profile = Profile()
-
         self.receiver: Profile = Profile()
+        self.chat_messages: List[str] = []
+        self.chat_images: List[str] = []
 
-        self.chat_messages: list[str] = []
+    def send(self, chat: str, images: Optional[List[str]] = None) -> str:
+        message = chat.strip()
+        if message:
+            self.chat_messages.append(message)
+        if images:
+            self.chat_images.extend(
+                Path(image).name for image in images if image and Path(image).name
+            )
+        return self.give_HTML()
 
-        self.chat_images: list[str] = []
-
-    def send(self, chat: str, images: list[str]):
-        '''
-            Send Message from sender
-            to receiver
-        '''
-        message: str = '<div>'
-        origin: str = list(self.sender.contact.keys())[0]
-        destiny: str = list(self.receiver.contact.keys())[0]
-        # Add Message
-        self.chat_messages.extend(chat)
-        # Add Images
-        self.chat_images.extend(images)
-        # Clear from unneeded data
-        del message, origin, destiny
-        # Show Messages
-        for text in self.chat_messages:
-            message += f'<div><span>{text}</span><br />'
-            del text
+    def give_HTML(self) -> str:
+        rendered = ["<div class=\"chat\">"]
+        for message in self.chat_messages:
+            rendered.append(f"<div><span>{html.escape(message)}</span>")
             for image in self.chat_images:
-                message += f'<img src = "pages/images/{image}"></div>'
-                # Clean Memory For Save To The Loops Iterations
-                del image
-        message += '</div>'
-        # Show New Message in front end
-        from flask import Flask, request
-        
-        chatting = Flask(__name__)
-        
-        @chatting.route('/chatting', methods = ['GET', 'POST'])
-        def chat_room() -> str:
-            if request.method == 'POST':
-                return message
-            else:
-                return '<hr />'
-        
+                safe_image = quote(Path(image).name)
+                rendered.append(
+                    f'<img src="/pages/images/{safe_image}" alt="Chat attachment">'
+                )
+            rendered.append("</div>")
+        rendered.append("</div>")
+        return "".join(rendered)
+
+
 class HangerPost:
-    
     def __init__(self):
-        '''
-            Define Data For User
-            Post and give HTML view
-        '''
-        self.content: str = ''
-
-        self.images: list[str] = []
-
-        self.comments: list[str] = []
-
+        self.content: str = ""
+        self.images: List[str] = []
+        self.comments: List[str] = []
         self.likes: int = 0
 
     def give_HTML(self, style: str) -> str:
-        '''
-            Give HTML text with style to use
-        '''
-        text: str = '<!DOCTYPE html>\n\t<head>\n\t\t<title>Hanger Post</title>\n\t\t'
-        style_text: str = ''
-        with open(f'/workspaces/hanger/pages/{style}', 'r') as handler:
-            for line in handler.readlines():
-                style_text += line
-        text += f'<style>{style_text}</style>\n\t'
-        del style_text
-        text += '</head>\n\t'
-        text += '<body>\n\t\t'
-        # Post Generation Start
-        text += f'<div class = post>{self.content}'
+        style_path = PAGES_DIR / Path(style).name
+        style_text = style_path.read_text(encoding="utf-8")
+        text = [
+            "<!DOCTYPE html><html><head><title>Hanger Post</title>",
+            f"<style>{style_text}</style></head><body>",
+            f'<div class="post">{html.escape(self.content)}',
+        ]
         for image in self.images:
-            text += f'<br /><img src = "https://github.com/martina-pauer/hanger/raw/main/pages/images/users/{image}" alt = "Post Image"/><br />'
-        text += '</div>\n'
-        # Post Generation End
-        # Add Comments
-        text += '\n\t\t<div class = comment>'
+            safe_image = quote(Path(image).name)
+            text.append(
+                '<br><img '
+                f'src="/pages/images/users/{safe_image}" '
+                'alt="Post image"><br>'
+            )
+        text.append("</div><div class=\"comments\">")
         for comment in self.comments:
-            text += comment
-        text += '\n\t\t</div>\n\t</body>\n</html>'
+            text.append(f'<div class="comment">{html.escape(comment)}</div>')
+        text.append("</div></body></html>")
+        return "".join(text)
 
-        return text
 
 class HangerApp:
-
     def __init__(self):
-        '''
-            Data about the flask app
-            for customization.
-        '''
-        self.title: str = 'Hanger Social Media'
-
-        self.domain: str = 'https://ominous-system-r464rw6444pp3pgxg-5000.app.github.dev'
-
-        self.icon: str = '/workspaces/pages/images/hanger_june_second.svg'
-
+        self.title: str = "Hanger Social Media"
+        self.domain: str = "http://127.0.0.1:5000"
+        self.icon: str = "/pages/images/hanger_june_second.svg"
         self.logged_user: Profile = Profile()
 
     def run(self, title: str, domain: str, icon: str):
@@ -145,48 +108,33 @@ class HangerApp:
         self.domain = domain
         self.icon = icon
 
-    def upload_post(self, post: HangerPost):
-        '''
-            Use generated post and write 
-            post to post folders for 
-            could be shows to every user.
-        '''
-        # Make An Original and Predictible name for post page
-        upload = open(f'post_{hash(post)}.html', 'w')
+    def upload_post(self, post: HangerPost) -> Path:
+        output = Path(f"post_{hash(post)}.html")
+        output.write_text(post.give_HTML("hanger.css"), encoding="utf-8")
+        return output
 
-        upload.write(post.give_HTML('hanger.css'))
-
-        upload.close()
-
-        del upload
-
-    def send_message(self, rec: Profile):
-        '''
-            Chat With An Receiver User
-        '''
-        chat: HangerMessage = HangerMessage()
+    def send_message(
+        self,
+        receiver: Profile,
+        message: str,
+        images: Optional[List[str]] = None,
+    ) -> HangerMessage:
+        chat = HangerMessage()
         chat.sender = self.logged_user
-        chat.receiver = rec
-        # This Works Because Will Be Used in 'hanger.py' Context
-        chat.send(request.form['chat-image'], chat_images) 
+        chat.receiver = receiver
+        chat.send(message, images)
+        return chat
 
-    def make_group(self, members: list[Profile]):
-        '''
-            Use Many Profile objects for
-            create a chat group with many
-            users.
-        '''
-        for member in members:
-            # Send The Sama Message From An User To All
-            self.send_message(member)
+    def make_group(
+        self,
+        members: List[Profile],
+        message: str,
+        images: Optional[List[str]] = None,
+    ) -> List[HangerMessage]:
+        return [self.send_message(member, message, images) for member in members]
 
-    def give_like(self, post: HangerPost):
-        '''
-            Increase like counting 
-            for post analising 
-            and recomendations.
-        '''
-        # Leave of this way for simplicity (One User Could give more likes to same post)
+    @staticmethod
+    def give_like(post: HangerPost) -> None:
         post.likes += 1
 
     def write_comment(self, content: HangerPost):

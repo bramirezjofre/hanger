@@ -1,8 +1,16 @@
 #!/usr/bin/python3
-from flask import Flask
-from flask import request
 import os
+import secrets
+from pathlib import Path
+
+from flask import Flask, jsonify, request, send_from_directory, session
+
+import base.interviewer
 import base.user
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PAGES_DIR = PROJECT_ROOT / "pages"
 
 web = Flask(__name__)
 log = base.user.Profile()
