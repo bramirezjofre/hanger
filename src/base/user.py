@@ -138,7 +138,7 @@ class HangerApp:
         '''
         # Start App
         import os
-        os.system(f'flask --app {title.split(' ')[0].lower()} run')
+        os.system(f"flask --app {title.split(' ')[0].lower()} run")
         del os
         # Update All Data In The Object With Parameters
         self.title = title
@@ -194,4 +194,4 @@ class HangerApp:
             Add New Comment To 
             post comments list.
         '''
-        content.comments.append(f'<h3>{self.logged_user.name}<h3><div class = "comment">{content.give_HTML('hanger.css')}</div')
+        content.comments.append(f"<h3>{self.logged_user.name}<h3><div class = 'comment'>{content.give_HTML('hanger.css')}</div")
