@@ -1,100 +1,109 @@
 #!/usr/bin/python3
-from flask import Flask
-from flask import request
 import os
+import secrets
+from pathlib import Path
+
+from flask import Flask, jsonify, request, send_from_directory, session
+
+import base.interviewer
 import base.user
 
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PAGES_DIR = PROJECT_ROOT / "pages"
+
 web = Flask(__name__)
-log = base.user.Profile()
-users: list[str] = [base.user.Profile(), base.user.Profile(), base.user.Profile()]
-chat_images: list[str] = []
+web.config["SECRET_KEY"] = os.environ.get("HANGER_SECRET_KEY", secrets.token_hex(32))
 
-@web.route('/', methods = ['GET', 'POST'])
-def main() -> str:
-    '''
-        The hanger Social Media main GUI
-    '''
-    content: str = ''
-    
-    if request.method == 'GET':
-        # Show The Web for login with the registered user
-        page = open('/workspaces/hanger/pages/hanger.html')
-        for line in page.readlines():
-            content += line
-        # Clear The Extra Objects When Aren't needed    
-        page.close()
-        del page
-        
-    return content
-
-@web.route('/hanger-app', methods = ['POST'])
-def logged() -> str:
-    '''
-        Show The App after login    
-    '''
-    log.name = request.form['hanger-user']
-    log.age = hex(hash(request.form['hanger-password']))
-    log.contact['mail'] = request.form['hanger-user']
-             
-    return  log.get_data().__str__()
-
-@web.route('/registered', methods = ['POST'])
-def register_ends() -> str:  
-    return '<h1>Congrat You\'re Hanger New User.</h1>'
-
-@web.route('/load', methods = ['POST'])
-def load_ends() -> str:
-    users.append(f"<li>{request.form['contact']}</li>")
-    
-    return f'<or>{users}</ol>'
+auth = base.interviewer.HangerSteps(
+    os.environ.get("HANGER_DB_PATH", "registered_users.db")
+)
+users = [base.user.Profile(), base.user.Profile(), base.user.Profile()]
+invited_contacts: list[str] = []
 
 
-@web.route('/interviewer-report', methods = ['GET', 'POST'])
-def make_report() -> str:
-    reporting = open('/workspaces/hanger/pages/loadUserForm.html', 'r')
-    content: str = ''
-    
-    for line in reporting.readlines():
-        content += line
+@web.get("/")
+def main():
+    return send_from_directory(PAGES_DIR, "hanger.html")
 
-    reporting.close()
-    del reporting
-    
-    return content
 
-@web.route('/hanger-steps', methods = ['POST'])
-def steps() -> str:
-    content: str = ''
-    
-    for user in users:
-        content += f'Send Page To {user}'
-        
-    return content
-    
-@web.route('/chatting', methods = ['POST'])
-def chat() -> str:
+@web.post("/hanger-app")
+def logged():
+    username = request.form.get("hanger-user", "").strip()
+    password = request.form.get("hanger-password", "")
+    if not auth.login(username, password):
+        return jsonify({"error": "Invalid username or password"}), 401
+
+    session["username"] = username
+    return jsonify(auth.app.logged_user.get_data())
+
+
+@web.get("/hangerSteps.html")
+def registration_page():
+    return send_from_directory(PAGES_DIR, "hangerSteps.html")
+
+
+@web.post("/registered")
+def register_ends():
+    username = request.form.get("userName", "").strip()
+    password = request.form.get("userPassword", "")
+    confirmation = request.form.get("verifyPassword", "")
+    if password != confirmation:
+        return jsonify({"error": "Passwords do not match"}), 400
+
+    try:
+        created = auth.register(username, password)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    if not created:
+        return jsonify({"error": "Username already exists"}), 409
+    return jsonify({"message": "User registered"}), 201
+
+
+@web.post("/load")
+def load_ends():
+    contact = request.form.get("contact", "").strip()
+    if not contact:
+        return jsonify({"error": "Contact is required"}), 400
+    if contact not in invited_contacts:
+        invited_contacts.append(contact)
+    return jsonify({"contacts": invited_contacts})
+
+
+@web.get("/interviewer-report")
+def make_report():
+    return send_from_directory(PAGES_DIR, "loadUserForm.html")
+
+
+@web.get("/hanger-steps")
+def steps():
+    return jsonify({"contacts": invited_contacts})
+
+
+@web.post("/chatting")
+def chat():
+    username = session.get("username")
+    if not username:
+        return jsonify({"error": "Authentication required"}), 401
+
+    sender = base.user.Profile()
+    sender.name = username
+    receiver = users[1]
+    receiver.name = "Second"
+
+    uploaded = request.files.get("chat-image")
+    images = [Path(uploaded.filename).name] if uploaded and uploaded.filename else []
+
     chatter = base.user.HangerMessage()
-    
-    chatter.sender = log
-    chatter.sender.name = 'First'
-    chatter.sender.contact = {'1' : 'Tel'}
-    
-    chatter.receiver = users[1]
-    chatter.receiver.name = 'Second'
-    chatter.receiver.contact = {'2' : 'Tel'}
+    chatter.sender = sender
+    chatter.receiver = receiver
+    return chatter.send(request.form.get("message", ""), images)
 
-    messages: str = f'<h1>From {chatter.sender.name} To {chatter.receiver.name}</h1>'
-    
-    chat_images.append(request.form['chat-image'])
-    
-    chatter.send(request.form['message'], chat_images)
-    
-    for message in chatter.chat_messages:
-        messages += message
-            
-    render = base.user.HangerPost()
-    render.content = ''.join(chatter.chat_messages)
-    render.images = chat_images
-    messages += render.give_HTML('hanger.css')
-    
-    return messages
+
+@web.get("/pages/<path:asset>")
+def pages(asset: str):
+    return send_from_directory(PAGES_DIR, asset)
+
+
+if __name__ == "__main__":
+    web.run()

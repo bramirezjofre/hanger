@@ -1,295 +1,240 @@
-import user
+import hashlib
+import hmac
+import os
+import secrets
+import smtplib
+import sqlite3
+import time
+from email.message import EmailMessage
+from pathlib import Path
+from typing import List, Optional, Union
+
+from . import user
+
 
 web: user.HangerApp = user.HangerApp()
 
+
 class loadUser:
-    
+    """Collect approved contacts and send their registration link."""
+
     def __init__(self):
-        '''
-            When The Interviewer proof that
-            the person reach the objetives
-            then write the contact for send
-            registration steps changing the
-            algorithm for kind of contact.
-        '''
-        # Dictonary "Address" To "Kind Of Contact"
-        self.contacts: dict[str, str] = []
+        self.contacts: dict[str, str] = {}
 
-    def send_steps(self):
-        '''
-            Filter by kind of contact and sends
-            steps of different way with link to
-            registration flask web app
-        '''
-        for contact in self.contacts.keys():
-            
-            address: str = contact.lower()
-            contact: str = self.contacts[address].lower()
-            
-            if contact.__contains__('mail'):
-                # RFC 821 Standard
-                import smtplib
-                # Security Layer For Addresses
-                import aiosmtpd
-                import ssl
-                from getpass import getpass
+    def add_user(self, kind: str, contact_address: str) -> bool:
+        address = contact_address.strip()
+        contact_kind = kind.strip().lower()
+        if not address or not contact_kind:
+            raise ValueError("Contact address and kind are required")
+        if address in self.contacts:
+            return False
+        self.contacts[address] = contact_kind
+        return True
 
-                port: int = 465
-                
-                server: str = 'smtp.gmail.com'
-                hanger_no_reply: str = '<hanger_no-reply@gmail.com>'
-                password: str = getpass().encode('utf-32')
-                
-                ssl_layer = ssl.create_default_context()
-                
-                with smtplib.SMTP_SSL(server, port, context = ssl_layer) as back:
-                    # Only expose password when is needed and delete for externs 
-                    back.login(hanger_no_reply, password.decode('utf-32'))
-                    del password
-                    # Send Mail With Next Steps
-                    back.sendmail(hanger_no_reply, address, f'<div><h1>Hanger Registration Steps</h1><a href = "{web.domain}/hangerSteps.html"></a></div>')      
-            elif contact.__contains__('tel'):
-                from twilio.rest import Client
-                
-                message_text: str = f'Register to Hanger Social Media in {web.domain}/hangerSteps.html'
-                # Complete with twilio account data
-                account_sid: str = ''
-                auth_token: str = ''
-                twilio_phone: str = ''
-                # Send Messages
-                twilio_client: Client = Client(account_sid, auth_token)
-                sender = twilio_client.messages.create  (
-                                                            body = message_text,
-                                                            FROM = twilio_phone,
-                                                            to = address
-                                                        )
-            elif contact == 'ig':
-                 #import Meta Instagram API for send messages in the chat
-                 from selenium import webdriver
-                 from selenium.webdriver.common.by import By
-                 from selenium.webdriver.common.keys import Keys
-                 from selenium.webdriver.support.wait import WebDriverWait
-                 # Configuration of Bot
-                 hangerIg: str = '@'
-                 hangerPass: str = ''
-                 first_msg: str = f'Register to Hanger Social Media in Next Link...'
-                 second_msg: str = f'{web.domain}/hangerSteps.html'
-                 # Navigator Simulation
-                 navigator = webdriver.Chrome()
-                 navigator.get(f'https://www.instagram.com/accounts/login/?next=https://www.instagram.com/&;;//&is_from_rle')
-                 # Login in instagram
-                 user_bot = WebDriverWait(navigator, timeout = 60).until   (
-                                                                                lambda form: form.find_element  (
-                                                                                                                    By.XPATH,
-                                                                                                                    "//*[@id = 'loginForm&']/div/div[1]/div/label/input"
-                                                                                                                )
-                                                                            )
-                 user_bot.send_keys(hangerIg)
-                 del user_bot, hangerIg
-                 password_bot = navigator.find_element  (
-                                                            By.XPATH,
-                                                            "*[id = 'loginForm&']/div/div[2]/div/label/input"
-                                                        )
-                 password_bot.send_keys(hangerPass)
-                 del password_bot, hangerPass
-                 # Simulate keyboard button pulsation
-                 enter = navigator.find_element (
-                                                    By.XPATH,
-                                                    "//*[@id = 'loginFrom&']/div/div[3]/label/input"
-                                                )
-                 enter.click()
-                 del enter
-                 # Unable Pop-Up Window
-                 disable = navigator.find_element   (
-                                                        By.CSS_SELECTOR,
-                                                        '._a9_1'
-                                                    )
-                 disable.click()
-                 del disable
-                 # Send message to users with link for continue the registration
-                 for user in self.contacts.keys():
-                     userIg: str = user.lower()
-                     # Use send message from Hanger instagram to selected user chat
-                     for messages_text in [first_msg, second_msg]:
-                         user_chat = navigator.find_element (
-                                                                By.CSS_SELECTOR,
-                                                                'input[type = "text"]'
-                                                            )
-                         user_chat.send_keys(message_text)
-                         # Clean memory after each iterations
-                         del user_chat
-                     # Clean memory for get free to don't use many RAM
-                     del userIg
-            # Free Out RAM for Get More
-            del selenium, contact, address, navigator, first_msg, second_msg
+    def send_steps(self) -> List[str]:
+        sent_to: List[str] = []
+        for address, kind in self.contacts.items():
+            if kind in {"mail", "email"}:
+                self._send_email(address)
+            elif kind in {"tel", "phone", "sms"}:
+                self._send_sms(address)
+            else:
+                raise ValueError(f"Unsupported contact kind: {kind}")
+            sent_to.append(address)
+        return sent_to
 
-    def add_user(self, kind: str, contact_address: str):
-        '''
-            Add a New Contact to Contacts list for
-            send steps later
-        '''
-        if (self.contacts.__contains__(contact_address) == False):
-            # Only Add New Contacts
-            self.contacts.__setitem__(contact_address, kind)
+    def _send_email(self, address: str) -> None:
+        username = os.environ.get("HANGER_SMTP_USER")
+        password = os.environ.get("HANGER_SMTP_PASSWORD")
+        if not username or not password:
+            raise RuntimeError("SMTP credentials are not configured")
+
+        message = EmailMessage()
+        message["Subject"] = "Hanger registration steps"
+        message["From"] = username
+        message["To"] = address
+        message.set_content(f"Register at {web.domain}/hangerSteps.html")
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(username, password)
+            server.send_message(message)
+
+    def _send_sms(self, address: str) -> None:
+        account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+        auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
+        phone = os.environ.get("TWILIO_PHONE_NUMBER")
+        if not account_sid or not auth_token or not phone:
+            raise RuntimeError("Twilio credentials are not configured")
+
+        try:
+            from twilio.rest import Client
+        except ImportError as error:
+            raise RuntimeError("Twilio support is not installed") from error
+
+        Client(account_sid, auth_token).messages.create(
+            body=f"Register at {web.domain}/hangerSteps.html",
+            from_=phone,
+            to=address,
+        )
+
 
 class HangerSteps:
+    """Registration, authentication, and password recovery service."""
 
-    def __init__(self):
-        '''
-            Web For Make Registration
-        '''
+    HASH_ITERATIONS = 600_000
+
+    def __init__(self, database: Union[str, Path] = "registered_users.db"):
         self.new_user: user.Profile = user.Profile()
-        
-        self.contact: dict[str, str] = {}
-
         self.app: user.HangerApp = user.HangerApp()
-        
-    def valid(self, text: str) -> bool:
-        '''
-            Said if a password is or not valid
-        '''
-        validation: bool = False
+        self.database = Path(database)
+        with self._connect() as connection:
+            self._ensure_schema(connection)
 
-        for validate in text:
-            if (validate.isupper() and (validate != text[0])):
-                # Must Be Have At least One Upper
-                validation: bool = ((not validation) and True)
-                break
-            else:
-                # But Not All Must Be Upper
-                validation: bool = False
-        # Must Have Upper and Lower Case With Numbers and Symbols Nor Letters Neither Numbers        
-        validation: bool = (validation and (text.isalnum() or not (text.isalpha and text.isnumeric)))
-                    
-        return validation
-    
-    def register(self):
-        
-        # Flask App for Sign Up New User
-        from flask import Flask
-        regstep = Flask(__name__)
-        # Get username and password
-        user_name: str = ''
-        passed: str = ''
-        # Decorator For Render Web Page 'hangerSteps.html' and get data
-        @regstep.route('/hangerSteps', methods = ['GET'])
-        def initial_page() -> str:
-            HyperText: str = ''
-            with open('hangerSteps.html', 'r') as document:
-                for line in document.readlines():
-                    HyperText += line
-                        
-            return HyperText
-        from hanger import register_ends
-        @regstep.route('registered', methods = ['POST'])
-        def render() -> str:
-            return register_ends
-        del register_ends
-        # form id: registerUser
-        # input ids: userName, userPassword, userAge, userContact, userKind
-        # Clean Memory For Load Next Module without Use More Memory
-        del regstep, Flask
-        # Save In DataBase
-        import sqlite3
-        
-        sql_pointer = sqlite3.connect('registered_users.db')
-        sql_engine = sql_pointer.cursor()
-        # SQL DataBase Transaction For Create User
-        sql_engine.execute('CREATE TABLE hanger_register(user varchar, password varchar);')
-        sql_engine.execute(f'INSERT INTO hanger_register VALUES ({user_name}, {passed});')
-        sql_pointer.commit()
-        del user_name, passed
-        # Close And Clean (Transaction End)
-        sql_engine.close()
-        sql_pointer.close()
-        del sql_engine, sql_pointer
+    @staticmethod
+    def valid(text: str) -> bool:
+        return (
+            len(text) >= 12
+            and any(character.islower() for character in text)
+            and any(character.isupper() for character in text)
+            and any(character.isdigit() for character in text)
+            and any(not character.isalnum() for character in text)
+        )
 
-    def login(self, username: str, password: str):
-        '''
-            Log In user for use app
-        '''
-        import sqlite3
-        # Make inside to class for don't access from external objects by security
-        sql_pointer = sqlite3.connect('registered_users.db')
-        sql_engine = sql_pointer.cursor()
-        # Must Be Exist One User with that name and password
-        self.new_user.name = username
-        import hashlib
-        username: str = hashlib.sha3_256(username.encode('UTF-8')).hexdigest()
-        password: str = hashlib.sha3_256(password.encode('UTF-8')).hexdigest()
-        answer = sql_engine.execute(f'SELECT user WHERE word = {password} AND user = {username} FROM hanger_register;')
-        # Clean Memory From Uneed data from Last to First for don't broke RAM
-        del password, username, hashlib
-        answer: int = answer.rowcount()
-        # Complete Database Transaction and clean memory
-        sql_pointer.commit()
-        sql_engine.close()
-        sql_pointer.close()
-        del sql_engine, sql_pointer, sqlite3
-        # Log when The password and The user is valid
-        if (answer == 1):
-            # Log User
-            del answer
-            self.app.logged_user = self.new_user
-            self.app.run(self.app.title, self.app.domain, self.app.icon)
-        else:
-            # Show mistake to user
-            del answer
-            # Flask Decorator For Render Error Page
-            from flask import Flask
+    def register(self, user_name: str, password: str) -> bool:
+        username = user_name.strip()
+        if not username:
+            raise ValueError("Username is required")
+        if not self.valid(password):
+            raise ValueError("Password does not meet the security requirements")
 
-            render_page_decorator = Flask(__name__)
+        try:
+            with self._connect() as connection:
+                self._ensure_schema(connection)
+                connection.execute(
+                    "INSERT INTO hanger_register (user, password) VALUES (?, ?)",
+                    (username, self._hash_password(password)),
+                )
+        except sqlite3.IntegrityError:
+            return False
+        return True
 
-            @render_page_decorator.route('/registered', ['POST'])
-            def invalid_password() -> str:
-                return '<h1>The User With That password isn\'t valid</h1>'
+    def login(self, username: str, password: str) -> bool:
+        with self._connect() as connection:
+            self._ensure_schema(connection)
+            row = connection.execute(
+                "SELECT password FROM hanger_register WHERE user = ?",
+                (username.strip(),),
+            ).fetchone()
 
-    def password_recovery(self):
-        '''
-            Make New Password for user
-            registered with mail.
-        '''
-                # Save In DataBase
-        import sqlite3
-        
-        user_name = self.app.logged_user.name
-        
-        sql_pointer = sqlite3.connect('registered_users.db')
-        sql_engine = sql_pointer.cursor()
-        # SQL DataBase Transaction For Create User
-        new_password: str = ''
-        before_password: str = sql_engine.execute(f'SELECT password FROM hanger_register WHERE {user_name};')
-        sql_pointer.commit()
-        # Form To Override Password
-        from flask import Flask, request
-        import os
-        
-        page_HTML: str = ''
-        
-        recovery = Flask(__name__)
-        
-        while ((not self.valid(new_password)) or (new_password == before_password)):
-            # Get From Password Page
-            with open('/workspaces/pages/recovery-password.html', 'r') as over:
-                for tag in over.readlines():
-                    page_HTML += tag
-                    
-            @recovery.route('/password-recovery', methods = ['GET', 'POST'])
-            def recovering() -> str:
-                if request.method == 'POST':
-                    if (self.valid(request.form['new-password']) and (request.form['new-password'] == request.form['retype-pass'])):
-                        new_password = request.form['new-password']
-                        sql_engine.execute(f'UPDATE password = {new_password} WHERE user = {user_name};')
-                        sql_pointer.commit()
-                        return f'<h1>New Password Set Up Right for {user_name}.</h1>'
-                    else:
-                        return f'<h1>Password Invalid</h1>{page_HTML}'
-                else:
-                    return page_HTML
-                
-        # Close And Clean (Transaction Database End)
-        sql_engine.close()
-        sql_pointer.close()
-        del sql_engine, sql_pointer, sqlite3
-        # Start Flask Web App
-        os.system(f'flask --app {__name__} run')
+        if row is None or not self._verify_password(password, row[0]):
+            return False
+
+        self.new_user.name = username.strip()
+        self.app.logged_user = self.new_user
+        return True
+
+    def create_password_recovery_token(
+        self, username: str, ttl_seconds: int = 900
+    ) -> Optional[str]:
+        token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        expires_at = int(time.time()) + ttl_seconds
+
+        with self._connect() as connection:
+            self._ensure_schema(connection)
+            result = connection.execute(
+                """
+                UPDATE hanger_register
+                SET recovery_token_hash = ?, recovery_expires = ?
+                WHERE user = ?
+                """,
+                (token_hash, expires_at, username.strip()),
+            )
+        return token if result.rowcount == 1 else None
+
+    def password_recovery(
+        self, username: str, token: str, new_password: str
+    ) -> bool:
+        if not self.valid(new_password):
+            raise ValueError("Password does not meet the security requirements")
+
+        with self._connect() as connection:
+            self._ensure_schema(connection)
+            row = connection.execute(
+                """
+                SELECT recovery_token_hash, recovery_expires
+                FROM hanger_register
+                WHERE user = ?
+                """,
+                (username.strip(),),
+            ).fetchone()
+            if row is None or row[0] is None or row[1] is None:
+                return False
+
+            supplied_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+            if int(row[1]) < int(time.time()) or not hmac.compare_digest(
+                supplied_hash, row[0]
+            ):
+                return False
+
+            connection.execute(
+                """
+                UPDATE hanger_register
+                SET password = ?, recovery_token_hash = NULL,
+                    recovery_expires = NULL
+                WHERE user = ?
+                """,
+                (self._hash_password(new_password), username.strip()),
+            )
+        return True
+
+    def _connect(self) -> sqlite3.Connection:
+        return sqlite3.connect(str(self.database))
+
+    @staticmethod
+    def _ensure_schema(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS hanger_register (
+                user TEXT PRIMARY KEY,
+                password TEXT NOT NULL,
+                recovery_token_hash TEXT,
+                recovery_expires INTEGER
+            )
+            """
+        )
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(hanger_register)")
+        }
+        if "recovery_token_hash" not in columns:
+            connection.execute(
+                "ALTER TABLE hanger_register ADD COLUMN recovery_token_hash TEXT"
+            )
+        if "recovery_expires" not in columns:
+            connection.execute(
+                "ALTER TABLE hanger_register ADD COLUMN recovery_expires INTEGER"
+            )
+
+    @classmethod
+    def _hash_password(cls, password: str) -> str:
+        salt = secrets.token_bytes(16)
+        digest = hashlib.pbkdf2_hmac(
+            "sha256", password.encode("utf-8"), salt, cls.HASH_ITERATIONS
+        )
+        return f"pbkdf2_sha256${cls.HASH_ITERATIONS}${salt.hex()}${digest.hex()}"
+
+    @staticmethod
+    def _verify_password(password: str, encoded: str) -> bool:
+        try:
+            algorithm, iterations, salt, expected = encoded.split("$", 3)
+            if algorithm != "pbkdf2_sha256":
+                return False
+            digest = hashlib.pbkdf2_hmac(
+                "sha256",
+                password.encode("utf-8"),
+                bytes.fromhex(salt),
+                int(iterations),
+            )
+        except (TypeError, ValueError):
+            return False
+        return hmac.compare_digest(digest.hex(), expected)
