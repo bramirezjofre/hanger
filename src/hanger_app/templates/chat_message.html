@@ -1,0 +1,5 @@
+<div class="chat-message">
+  <strong>{{ message.sender }}</strong> to <strong>{{ message.receiver }}</strong>:
+  <span>{{ message.content }}</span>
+  {% if attachment %}<img src="{{ url_for('hanger.uploaded_file', stored_name=attachment.stored_name) }}" alt="Attachment">{% endif %}
+</div>

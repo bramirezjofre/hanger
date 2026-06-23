@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Password recovery</title></head>
+<body><h1>Password recovery</h1>
+  {% if recovery_token %}
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="recovery_token" value="{{ recovery_token }}">
+      <input name="username" value="{{ username }}" required>
+      <input name="password" type="password" required>
+      <input name="password_confirmation" type="password" required>
+      <button type="submit">Set password</button>
+    </form>
+  {% else %}
+    <form method="post" action="{{ url_for('hanger.request_password_recovery') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input name="username" required>
+      <button type="submit">Send recovery link</button>
+    </form>
+  {% endif %}
+</body></html>
