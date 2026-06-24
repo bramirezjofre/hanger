@@ -1,14 +1,17 @@
 import hmac
 import secrets
+import time
 from pathlib import Path
 from typing import Optional
 
 import click
 from flask import Flask, abort, request, session
+from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .config import PROJECT_ROOT, Settings
+from .config import Settings
 from .db import Database
 from .repositories import (
+    AuditRepository,
     InvitationRepository,
     JobRepository,
     MessageRepository,
@@ -27,23 +30,31 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
     app.config.from_mapping(settings.flask_config())
     if test_config:
         app.config.update(test_config)
+    if app.config["TRUST_PROXY"]:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-    database = Database(Path(app.config["DATABASE_PATH"]), PROJECT_ROOT / "migrations")
-    database.migrate()
+    migrations_dir = Path(__file__).resolve().parent / "migrations"
+    database = Database(Path(app.config["DATABASE_PATH"]), migrations_dir)
+    if app.config["AUTO_MIGRATE"]:
+        database.migrate()
     users = UserRepository(database)
     rate_limits = RateLimitRepository(database)
     jobs = JobRepository(database)
     invitation_repository = InvitationRepository(database)
     messages = MessageRepository(database)
     posts = PostRepository(database)
+    audit = AuditRepository(database)
     invitations = InvitationService(invitation_repository, jobs)
     worker = JobWorker(jobs, invitation_repository, DeliveryGateway())
+    auth = AuthService(users, rate_limits, jobs, app.config["PUBLIC_URL"])
 
     app.extensions["hanger"] = {
         "database": database,
         "users": users,
+        "rate_limits": rate_limits,
         "jobs": jobs,
-        "auth": AuthService(users, rate_limits, jobs, app.config["PUBLIC_URL"]),
+        "auth": auth,
+        "audit": audit,
         "invitations": invitations,
         "invitation_repository": invitation_repository,
         "messages": messages,
@@ -75,16 +86,61 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
 
         return {"csrf_token": csrf_token}
 
+    @app.after_request
+    def protect_sensitive_responses(response):
+        if request.path.startswith("/password-recovery"):
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+
     @app.cli.command("process-jobs")
     @click.option("--limit", default=100, type=int)
-    def process_jobs(limit: int):
-        processed = 0
-        while processed < limit:
+    @click.option("--watch", is_flag=True, help="Wait for new jobs continuously")
+    def process_jobs(limit: int, watch: bool):
+        total = 0
+        while watch or total < limit:
             result = worker.process_once()
             if result is None:
-                break
-            processed += 1
-        click.echo(f"Processed {processed} jobs")
+                if not watch:
+                    break
+                time.sleep(2)
+                continue
+            total += 1
+        click.echo(f"Processed {total} jobs")
+
+    @app.cli.command("db-upgrade")
+    def db_upgrade():
+        database.migrate()
+        click.echo("Database migrations applied")
+
+    @app.cli.command("create-admin")
+    @click.option("--username", prompt=True)
+    @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)
+    def create_admin(username: str, password: str):
+        if not auth.register(username, password, role="admin"):
+            raise click.ClickException("Username already exists")
+        click.echo(f"Admin created: {username}")
+
+    @app.cli.command("set-role")
+    @click.argument("username")
+    @click.argument("role", type=click.Choice(["user", "admin"]))
+    def set_role(username: str, role: str):
+        if not users.set_role(username, role):
+            raise click.ClickException("User not found")
+        click.echo(f"Updated {username} to {role}")
+
+    @app.get("/health/live")
+    def health_live():
+        return {"status": "ok"}
+
+    @app.get("/health/ready")
+    def health_ready():
+        try:
+            with database.transaction() as connection:
+                connection.execute("SELECT 1 FROM schema_migrations").fetchone()
+        except Exception:
+            return {"status": "not-ready"}, 503
+        return {"status": "ready"}
 
     app.register_blueprint(bp)
     return app

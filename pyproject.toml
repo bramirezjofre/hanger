@@ -8,21 +8,33 @@ version = "0.1.0"
 description = "Interview-gated social application"
 readme = "README.md"
 requires-python = ">=3.9"
-license = {file = "LICENSE"}
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "Flask>=3.0,<4",
     "Pillow>=10,<12",
     "twilio>=9,<10",
+    "gunicorn>=23,<24",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8,<9",
     "ruff>=0.6,<1",
+    "pytest-cov>=6,<7",
+]
+
+[tool.poetry]
+packages = [
+    {include = "hanger_app", from = "src"},
+    {include = "base", from = "src"},
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+hanger_app = ["migrations/*.sql", "templates/*.html"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

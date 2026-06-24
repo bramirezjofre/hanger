@@ -1,3 +1,4 @@
+import hashlib
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -33,40 +34,81 @@ class Database:
             connection.close()
 
     def migrate(self) -> None:
-        with self.transaction() as connection:
+        connection = self.connect()
+        try:
+            connection.execute("BEGIN EXCLUSIVE")
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS schema_migrations (
                     version TEXT PRIMARY KEY,
+                    checksum TEXT,
                     applied_at INTEGER NOT NULL DEFAULT (unixepoch())
                 )
                 """
             )
+            columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(schema_migrations)")
+            }
+            if "checksum" not in columns:
+                connection.execute(
+                    "ALTER TABLE schema_migrations ADD COLUMN checksum TEXT"
+                )
             applied = {
-                row[0]
-                for row in connection.execute("SELECT version FROM schema_migrations")
+                row["version"]: row["checksum"]
+                for row in connection.execute(
+                    "SELECT version, checksum FROM schema_migrations"
+                )
             }
             for migration in sorted(self.migrations_dir.glob("*.sql")):
+                script = migration.read_text(encoding="utf-8")
+                checksum = hashlib.sha256(script.encode("utf-8")).hexdigest()
+                recorded = applied.get(migration.name)
                 if migration.name in applied:
+                    if recorded is not None and recorded != checksum:
+                        raise RuntimeError(f"Migration changed: {migration.name}")
+                    if recorded is None:
+                        connection.execute(
+                            """
+                            UPDATE schema_migrations SET checksum = ?
+                            WHERE version = ?
+                            """,
+                            (checksum, migration.name),
+                        )
                     continue
-                connection.executescript(migration.read_text(encoding="utf-8"))
+                if migration.name != "001_initial.sql":
+                    self._migrate_legacy_users(connection)
+                for statement in script.split(";"):
+                    if statement.strip():
+                        connection.execute(statement)
                 connection.execute(
-                    "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)",
-                    (migration.name,),
+                    """
+                    INSERT INTO schema_migrations (version, checksum) VALUES (?, ?)
+                    ON CONFLICT(version) DO UPDATE SET checksum = excluded.checksum
+                    """,
+                    (migration.name, checksum),
                 )
-        self._migrate_legacy_users()
+            self._migrate_legacy_users(connection)
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
-    def _migrate_legacy_users(self) -> None:
-        with self.transaction() as connection:
-            legacy = connection.execute(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
-                ("hanger_register",),
-            ).fetchone()
-            if legacy:
-                connection.execute(
-                    """
-                    INSERT OR IGNORE INTO users (username, password_hash)
-                    SELECT user, password FROM hanger_register
-                    WHERE user IS NOT NULL AND password IS NOT NULL
-                    """
-                )
+    @staticmethod
+    def _migrate_legacy_users(connection: sqlite3.Connection) -> None:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        if "users" in tables and "hanger_register" in tables:
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO users (username, password_hash)
+                SELECT user, password FROM hanger_register
+                WHERE user IS NOT NULL AND password IS NOT NULL
+                """
+            )

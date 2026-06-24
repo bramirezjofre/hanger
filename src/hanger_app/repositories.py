@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import time
+import uuid
 from typing import Optional
 
 from .db import Database
@@ -18,16 +19,18 @@ class UserRepository:
         age: Optional[int],
         contact_kind: Optional[str],
         contact_address: Optional[str],
+        role: str = "user",
     ) -> bool:
         try:
             with self.database.transaction() as connection:
                 connection.execute(
                     """
                     INSERT INTO users
-                        (username, password_hash, age, contact_kind, contact_address)
-                    VALUES (?, ?, ?, ?, ?)
+                        (username, password_hash, age, contact_kind,
+                         contact_address, role)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (username, password_hash, age, contact_kind, contact_address),
+                    (username, password_hash, age, contact_kind, contact_address, role),
                 )
         except sqlite3.IntegrityError:
             return False
@@ -37,21 +40,54 @@ class UserRepository:
         with self.database.transaction() as connection:
             row = connection.execute(
                 """
-                SELECT id, username, password_hash, age, contact_kind, contact_address
+                SELECT id, username, password_hash, age, contact_kind,
+                       contact_address, role
                 FROM users WHERE username = ?
                 """,
                 (username,),
             ).fetchone()
         return User(**dict(row)) if row else None
 
-    def set_recovery(self, username: str, token_hash: str, expires: int) -> bool:
+    def queue_recovery(
+        self,
+        username: str,
+        token_hash: str,
+        expires: int,
+        payload: dict,
+        idempotency_key: str,
+    ) -> bool:
+        try:
+            with self.database.transaction(immediate=True) as connection:
+                result = connection.execute(
+                    """
+                    UPDATE users SET recovery_token_hash = ?, recovery_expires = ?
+                    WHERE username = ?
+                    """,
+                    (token_hash, expires, username),
+                )
+                if result.rowcount != 1:
+                    return False
+                connection.execute(
+                    """
+                    INSERT INTO jobs (kind, payload_json, idempotency_key)
+                    VALUES ('password_recovery', ?, ?)
+                    """,
+                    (json.dumps(payload), idempotency_key),
+                )
+        except sqlite3.IntegrityError:
+            return False
+        return True
+
+    def set_role(self, username: str, role: str) -> bool:
+        if role not in {"user", "admin"}:
+            raise ValueError("Unsupported role")
         with self.database.transaction() as connection:
             result = connection.execute(
                 """
-                UPDATE users SET recovery_token_hash = ?, recovery_expires = ?
+                UPDATE users SET role = ?
                 WHERE username = ?
                 """,
-                (token_hash, expires, username),
+                (role, username),
             )
         return result.rowcount == 1
 
@@ -79,6 +115,9 @@ class RateLimitRepository:
     def allow(self, key: str, limit: int, window_seconds: int) -> bool:
         now = int(time.time())
         with self.database.transaction(immediate=True) as connection:
+            connection.execute(
+                "DELETE FROM rate_limits WHERE window_started < ?", (now - 86400,)
+            )
             row = connection.execute(
                 "SELECT window_started, attempts FROM rate_limits WHERE key = ?",
                 (key,),
@@ -100,6 +139,21 @@ class RateLimitRepository:
                 "UPDATE rate_limits SET attempts = attempts + 1 WHERE key = ?", (key,)
             )
             return True
+
+
+class AuditRepository:
+    def __init__(self, database: Database):
+        self.database = database
+
+    def record(self, actor: str, action: str, target: Optional[str] = None) -> None:
+        with self.database.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO audit_log (actor_id, action, target)
+                SELECT id, ?, ? FROM users WHERE username = ?
+                """,
+                (action, target, actor),
+            )
 
 
 class InvitationRepository:
@@ -125,6 +179,43 @@ class InvitationRepository:
                 (address, kind),
             )
             return cursor.lastrowid, True
+
+    def add_with_job(
+        self,
+        address: str,
+        kind: str,
+        payload: dict,
+        idempotency_key: str,
+    ) -> bool:
+        try:
+            with self.database.transaction(immediate=True) as connection:
+                existing = connection.execute(
+                    """
+                    SELECT id FROM invitations
+                    WHERE contact_address = ? AND contact_kind = ?
+                    """,
+                    (address, kind),
+                ).fetchone()
+                if existing:
+                    return False
+                cursor = connection.execute(
+                    """
+                    INSERT INTO invitations (contact_address, contact_kind)
+                    VALUES (?, ?)
+                    """,
+                    (address, kind),
+                )
+                payload["invitation_id"] = cursor.lastrowid
+                connection.execute(
+                    """
+                    INSERT INTO jobs (kind, payload_json, idempotency_key)
+                    VALUES ('registration_invitation', ?, ?)
+                    """,
+                    (json.dumps(payload), idempotency_key),
+                )
+        except sqlite3.IntegrityError:
+            return False
+        return True
 
     def list_all(self) -> list[dict]:
         with self.database.transaction() as connection:
@@ -167,51 +258,59 @@ class JobRepository:
 
     def claim_next(self) -> Optional[Job]:
         now = int(time.time())
+        lease_id = uuid.uuid4().hex
         with self.database.transaction(immediate=True) as connection:
             row = connection.execute(
                 """
                 SELECT id, kind, payload_json, attempts FROM jobs
-                WHERE status IN ('pending', 'failed') AND available_at <= ?
-                    AND attempts < 5
+                WHERE attempts < 5 AND (
+                    (status IN ('pending', 'failed') AND available_at <= ?)
+                    OR (status = 'running' AND locked_at <= ?)
+                )
                 ORDER BY id LIMIT 1
                 """,
-                (now,),
+                (now, now - 300),
             ).fetchone()
             if row is None:
                 return None
             connection.execute(
                 """
-                UPDATE jobs SET status = 'running', attempts = attempts + 1
+                UPDATE jobs SET status = 'running', attempts = attempts + 1,
+                    lease_id = ?, locked_at = ?
                 WHERE id = ?
                 """,
-                (row["id"],),
+                (lease_id, now, row["id"]),
             )
         return Job(
             id=row["id"],
             kind=row["kind"],
             payload=json.loads(row["payload_json"]),
             attempts=row["attempts"] + 1,
+            lease_id=lease_id,
         )
 
-    def complete(self, job_id: int) -> None:
+    def complete(self, job: Job) -> bool:
         with self.database.transaction() as connection:
-            connection.execute(
+            result = connection.execute(
                 """
-                UPDATE jobs SET status = 'completed', completed_at = unixepoch()
-                WHERE id = ?
+                UPDATE jobs SET status = 'completed', completed_at = unixepoch(),
+                    lease_id = NULL, locked_at = NULL
+                WHERE id = ? AND lease_id = ?
                 """,
-                (job_id,),
+                (job.id, job.lease_id),
             )
+        return result.rowcount == 1
 
     def fail(self, job: Job, error: str) -> None:
         retry_at = int(time.time()) + min(300, 2**job.attempts)
         with self.database.transaction() as connection:
             connection.execute(
                 """
-                UPDATE jobs SET status = 'failed', available_at = ?, last_error = ?
-                WHERE id = ?
+                UPDATE jobs SET status = 'failed', available_at = ?, last_error = ?,
+                    lease_id = NULL, locked_at = NULL
+                WHERE id = ? AND lease_id = ?
                 """,
-                (retry_at, error[:500], job.id),
+                (retry_at, error[:500], job.id, job.lease_id),
             )
 
     def list_all(self) -> list[dict]:
@@ -232,9 +331,21 @@ class MessageRepository:
         attachment: Optional[dict] = None,
     ) -> Message:
         with self.database.transaction() as connection:
+            people = {
+                row["username"]: row["id"]
+                for row in connection.execute(
+                    "SELECT id, username FROM users WHERE username IN (?, ?)",
+                    (sender, receiver),
+                )
+            }
+            if sender not in people or receiver not in people:
+                raise LookupError("Sender or receiver does not exist")
             cursor = connection.execute(
-                "INSERT INTO messages (sender, receiver, content) VALUES (?, ?, ?)",
-                (sender, receiver, content),
+                """
+                INSERT INTO messages (sender_id, receiver_id, content)
+                VALUES (?, ?, ?)
+                """,
+                (people[sender], people[receiver], content),
             )
             if attachment:
                 connection.execute(
@@ -252,9 +363,34 @@ class MessageRepository:
                     ),
                 )
             row = connection.execute(
-                "SELECT * FROM messages WHERE id = ?", (cursor.lastrowid,)
+                """
+                SELECT message.id, sender.username AS sender,
+                       receiver.username AS receiver, message.content,
+                       message.created_at
+                FROM messages AS message
+                JOIN users AS sender ON sender.id = message.sender_id
+                JOIN users AS receiver ON receiver.id = message.receiver_id
+                WHERE message.id = ?
+                """,
+                (cursor.lastrowid,),
             ).fetchone()
         return Message(**dict(row))
+
+    def can_access_attachment(self, stored_name: str, username: str) -> bool:
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM attachments AS attachment
+                JOIN messages AS message ON message.id = attachment.message_id
+                JOIN users AS sender ON sender.id = message.sender_id
+                JOIN users AS receiver ON receiver.id = message.receiver_id
+                WHERE attachment.stored_name = ?
+                    AND ? IN (sender.username, receiver.username)
+                """,
+                (stored_name, username),
+            ).fetchone()
+        return row is not None
 
 
 class PostRepository:
@@ -264,32 +400,66 @@ class PostRepository:
     def create(self, author: str, content: str) -> Post:
         with self.database.transaction() as connection:
             cursor = connection.execute(
-                "INSERT INTO posts (author, content) VALUES (?, ?)", (author, content)
+                """
+                INSERT INTO posts (author_id, content)
+                SELECT id, ? FROM users WHERE username = ?
+                """,
+                (content, author),
             )
+            if cursor.rowcount != 1:
+                raise LookupError("Author does not exist")
             row = connection.execute(
-                "SELECT * FROM posts WHERE id = ?", (cursor.lastrowid,)
+                """
+                SELECT post.id, user.username AS author, post.content,
+                       post.created_at
+                FROM posts AS post
+                JOIN users AS user ON user.id = post.author_id
+                WHERE post.id = ?
+                """,
+                (cursor.lastrowid,),
             ).fetchone()
         return Post(**dict(row))
 
     def list_all(self) -> list[Post]:
         with self.database.transaction() as connection:
-            rows = connection.execute("SELECT * FROM posts ORDER BY id DESC").fetchall()
+            rows = connection.execute(
+                """
+                SELECT post.id, user.username AS author, post.content,
+                       post.created_at
+                FROM posts AS post
+                JOIN users AS user ON user.id = post.author_id
+                ORDER BY post.id DESC
+                """
+            ).fetchall()
         return [Post(**dict(row)) for row in rows]
 
-    def comment(self, post_id: int, author: str, content: str) -> None:
+    def comment(self, post_id: int, author: str, content: str) -> bool:
         with self.database.transaction() as connection:
-            connection.execute(
-                "INSERT INTO comments (post_id, author, content) VALUES (?, ?, ?)",
-                (post_id, author, content),
+            result = connection.execute(
+                """
+                INSERT INTO comments (post_id, author_id, content)
+                SELECT post.id, user.id, ?
+                FROM posts AS post, users AS user
+                WHERE post.id = ? AND user.username = ?
+                """,
+                (content, post_id, author),
             )
+        return result.rowcount == 1
 
-    def like(self, post_id: int, username: str) -> bool:
+    def like(self, post_id: int, username: str) -> Optional[bool]:
         try:
             with self.database.transaction() as connection:
-                connection.execute(
-                    "INSERT INTO post_likes (post_id, username) VALUES (?, ?)",
+                result = connection.execute(
+                    """
+                    INSERT INTO post_likes (post_id, user_id)
+                    SELECT post.id, user.id
+                    FROM posts AS post, users AS user
+                    WHERE post.id = ? AND user.username = ?
+                    """,
                     (post_id, username),
                 )
+                if result.rowcount != 1:
+                    return None
         except sqlite3.IntegrityError:
             return False
         return True
