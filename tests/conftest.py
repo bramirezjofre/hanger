@@ -16,11 +16,12 @@ def app(tmp_path, monkeypatch):
         {
             "TESTING": True,
             "SECRET_KEY": "test-secret",
-            "ADMIN_TOKEN": "test-admin",
             "DATABASE_PATH": str(tmp_path / "hanger.sqlite3"),
             "UPLOAD_DIR": str(tmp_path / "uploads"),
             "PUBLIC_URL": "http://test.local",
             "MAX_CONTENT_LENGTH": 1024 * 1024,
+            "AUTO_MIGRATE": True,
+            "TRUST_PROXY": False,
         }
     )
 

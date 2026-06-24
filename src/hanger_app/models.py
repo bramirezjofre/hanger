@@ -10,6 +10,7 @@ class User:
     age: Optional[int]
     contact_kind: Optional[str]
     contact_address: Optional[str]
+    role: str
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,7 @@ class Job:
     kind: str
     payload: dict
     attempts: int
+    lease_id: str
 
 
 @dataclass(frozen=True)

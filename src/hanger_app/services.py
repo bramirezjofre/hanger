@@ -1,4 +1,5 @@
 import os
+import re
 import secrets
 import smtplib
 import time
@@ -40,19 +41,32 @@ class AuthService:
         age: Optional[int] = None,
         contact_kind: Optional[str] = None,
         contact_address: Optional[str] = None,
+        role: str = "user",
     ) -> bool:
         username = username.strip()
         kind = contact_kind.strip().lower() if contact_kind else None
         address = contact_address.strip() if contact_address else None
-        if not username:
-            raise ValueError("Username is required")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{3,64}", username):
+            raise ValueError("Username must be 3-64 safe characters")
         if age is not None and not 1 <= age <= 130:
             raise ValueError("Age must be between 1 and 130")
         if not valid_password(password):
             raise ValueError("Password does not meet the security requirements")
         if bool(kind) != bool(address):
             raise ValueError("Contact kind and address must be provided together")
-        return self.users.create(username, hash_password(password), age, kind, address)
+        if kind in {"email", "mail"} and not re.fullmatch(
+            r"[^@\s]+@[^@\s]+\.[^@\s]+", address or ""
+        ):
+            raise ValueError("Invalid email address")
+        if kind in {"phone", "sms", "tel"} and not re.fullmatch(
+            r"\+?[1-9]\d{7,14}", address or ""
+        ):
+            raise ValueError("Invalid phone number")
+        if role not in {"user", "admin"}:
+            raise ValueError("Unsupported role")
+        return self.users.create(
+            username, hash_password(password), age, kind, address, role
+        )
 
     def login(self, username: str, password: str, client_key: str) -> Optional[User]:
         normalized = username.strip()
@@ -75,15 +89,13 @@ class AuthService:
             return
 
         token = secrets.token_urlsafe(32)
-        if not self.users.set_recovery(
-            normalized, hash_token(token), int(time.time()) + 900
-        ):
-            return
         query = urlencode({"user": normalized, "token": token})
         reset_url = f"{self.public_url}/password-recovery?{query}"
         bucket = int(time.time()) // 60
-        self.jobs.enqueue(
-            "password_recovery",
+        self.users.queue_recovery(
+            normalized,
+            hash_token(token),
+            int(time.time()) + 900,
             {
                 "address": found.contact_address,
                 "kind": found.contact_kind,
@@ -119,22 +131,16 @@ class InvitationService:
             "tel",
         }:
             raise ValueError("A supported contact address and kind are required")
-        invitation_id, created = self.invitations.add(
-            normalized_address, normalized_kind
-        )
-        if not created:
-            return False
-        self.jobs.enqueue(
-            "registration_invitation",
+        return self.invitations.add_with_job(
+            normalized_address,
+            normalized_kind,
             {
-                "invitation_id": invitation_id,
                 "address": normalized_address,
                 "kind": normalized_kind,
                 "registration_url": registration_url,
             },
             f"invitation:{normalized_kind}:{normalized_address.lower()}",
         )
-        return True
 
 
 class DeliveryGateway:
@@ -213,5 +219,4 @@ class JobWorker:
         except Exception as error:
             self.jobs.fail(job, str(error))
             return False
-        self.jobs.complete(job.id)
-        return True
+        return self.jobs.complete(job)
