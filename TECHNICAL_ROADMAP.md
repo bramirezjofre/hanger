@@ -1,4 +1,4 @@
-# Technical Roadmap
+# [EN] Technical Roadmap
 
 This roadmap converts the current product notes into implementable engineering work for `hanger_app`.
 
@@ -83,3 +83,12 @@ Acceptance criteria:
 6. Add interview notes and access controls.
 7. Add reporting commands and sanitized exports.
 8. Document deployment, backup, restore, and operational workflows.
+<hr/>
+# [ES] Planificación Técnica
+## Fase 1
+-
+##
+##
+##
+##
+<hr/>
