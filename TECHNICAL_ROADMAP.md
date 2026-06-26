@@ -83,7 +83,7 @@ Acceptance criteria:
 6. Add interview notes and access controls.
 7. Add reporting commands and sanitized exports.
 8. Document deployment, backup, restore, and operational workflows.
-<hr/>
+
 # [ES] Proximos Pasos
 
 ## Fase 1: Registro Controlado De usuarios
@@ -166,7 +166,7 @@ Varificación:
 6. .
 7. .
 8. .
-<hr/>
+
 # [FR] 
 
 ## 1
@@ -249,7 +249,6 @@ Varificación:
 6. .
 7. .
 8. .
-<hr/>
 # [PT] 
 
 ## Fase 1:
@@ -332,7 +331,7 @@ Varificación:
 6. .
 7. .
 8. .
-<hr/>
+
 # [DE] 
 
 ## Phase 1: 
@@ -415,7 +414,7 @@ Varificación:
 6. .
 7. .
 8. .
-<hr/>
+
 # [ZH] 后续步骤
 
 ## 阶段 一: 
@@ -498,7 +497,7 @@ Varificación:
 6. .
 7. .
 8. .
-<hr/>
+
 # [RU] 
 
 ## фаза 1
@@ -581,7 +580,7 @@ Varificación:
 6. .
 7. .
 8. .
-<hr/>
+
 # [UK] 
 
 ## фаза 1
@@ -664,7 +663,7 @@ Varificación:
 6. .
 7. .
 8. .
-<hr/>
+
 # [JA] 
 
 ## 段階 1
@@ -747,4 +746,3 @@ Varificación:
 6. .
 7. .
 8. .
-<hr/>
