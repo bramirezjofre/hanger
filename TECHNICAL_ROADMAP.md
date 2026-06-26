@@ -90,17 +90,17 @@ Acceptance criteria:
 
 Objetivos: Solo registrar usuarios que pasaron proceso de selección.
 
-- .
-- .
-- .
-- .
-- .
+- Agrega un flujo de trabajo con estados de usuarios: `submitted`, `screening`, `interview`, `accepted`, `rejected`, y `invited`.
+- Guardar respuestas, fechas y notas de inspectores de usuarios.
+- Cambiar de registro abierto a solo con invitacion.
+- Agregar rutas administrativas y comandos para revisar, aceptar, rechazar e invitar usuarios.
+- Agregar eventos de auditoria en cada cambio de estado en la app.
 
 Verificación:
 
-- .
-- .
-- .
+- Un usuario sin invitar no puede registrarse.
+- Los usuarios aprovados reciben una sola invitación.
+- Los test cubren detalles comunes de seguridad.
 ## Fase 2: 
 
 Objetivos: .
