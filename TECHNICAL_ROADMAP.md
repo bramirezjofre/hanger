@@ -1,14 +1,16 @@
-# [EN] Technical Roadmap
+# Technical Roadmap
 
-This roadmap converts the current product notes into implementable engineering work for `hanger_app`.
+This roadmap converts the current product notes in `ROADMAP.md` into implementable engineering work for `hanger_app`. It focuses on the next backend, security, operations, and documentation milestones.
 
-## Phase 1: Controlled User Onboarding
+## 1. Controlled User Onboarding
 
 Goal: only register users who pass a selection process.
 
+Implementation scope:
+
 - Add an application workflow with states: `submitted`, `screening`, `interview`, `accepted`, `rejected`, and `invited`.
 - Store application answers, reviewer notes, decision timestamps, and reviewer user IDs.
-- Replace open registration with invite-only registration tied to an accepted application.
+- Replace open registration with invite-only registration tied to accepted applications.
 - Add admin routes and CLI commands to review, accept, reject, and invite applicants.
 - Add audit events for every application state change.
 
@@ -18,14 +20,16 @@ Acceptance criteria:
 - Accepted applicants receive a single-use invitation.
 - Tests cover duplicate applications, rejected applications, expired invites, and admin-only decisions.
 
-## Phase 2: Per-Installation Requirements
+## 2. Per-Installation Requirements
 
-Goal: support different rules for each deployed server.
+Goal: support different eligibility rules and operating limits for each deployed server.
 
-- Introduce an `installation_settings` table for configurable onboarding, eligibility, limits, and branding.
-- Move server-specific values out of code into environment variables and database-backed settings.
-- Add validation for required production settings during app startup.
-- Add admin UI/CLI for reading and updating safe settings.
+Implementation scope:
+
+- Introduce an `installation_settings` table for onboarding rules, eligibility criteria, limits, and branding.
+- Move server-specific values out of source code into environment variables or database-backed settings.
+- Validate required production settings during application startup.
+- Add an admin UI or CLI for reading and updating safe settings.
 - Document required configuration in `README.md` and deployment examples.
 
 Acceptance criteria:
@@ -34,14 +38,16 @@ Acceptance criteria:
 - Missing production configuration fails fast with a clear error.
 - Tests verify default settings, overrides, and invalid configuration.
 
-## Phase 3: Interview and Research Pipeline
+## 3. Interview and Research Pipeline
 
-Goal: manage interviews with possible future users.
+Goal: manage interviews with possible future users and convert research into actionable product signals.
+
+Implementation scope:
 
 - Add applicant interview scheduling fields: contact method, preferred times, assigned interviewer, and status.
 - Add interview notes with structured categories: motivation, fit, risks, and follow-up actions.
 - Add privacy controls so only admins or assigned interviewers can read interview notes.
-- Add export/reporting commands for aggregate research metrics without exposing sensitive notes.
+- Add aggregate exports for research metrics without exposing sensitive notes.
 
 Acceptance criteria:
 
@@ -49,12 +55,14 @@ Acceptance criteria:
 - Admins can list applicants by interview status.
 - Research exports exclude private free-text notes by default.
 
-## Phase 4: Funding and Operations Readiness
+## 4. Funding and Operations Readiness
 
-Goal: prepare the project for external funding or sponsorship.
+Goal: prepare the project for external funding, sponsorship, or structured collaboration.
+
+Implementation scope:
 
 - Add operational metrics: registered users, active users, applications by status, invitation conversion, and message/job health.
-- Add health dashboards or CLI reports using existing `/health/live` and `/health/ready` foundations.
+- Add health dashboards or CLI reports using the existing `/health/live` and `/health/ready` foundations.
 - Improve logging around authentication, onboarding, background jobs, and upload access decisions.
 - Add data retention policies for applications, interview notes, and recovery tokens.
 - Add backup and restore documentation for SQLite deployments.
@@ -63,686 +71,43 @@ Acceptance criteria:
 
 - Maintainers can generate a funding-ready usage report without direct database inspection.
 - Sensitive user data is excluded from public or sponsor-facing exports.
-- Backup/restore steps are documented and tested against a local database.
+- Backup and restore steps are documented and tested against a local database.
 
 ## Cross-Cutting Engineering Priorities
 
 - Security: preserve invite token single-use semantics, role-based access control, audit logs, and upload authorization.
 - Testing: keep coverage above the CI threshold and add route/service tests for every onboarding decision path.
-- Migrations: add new schema changes only through numbered files in `src/hanger_app/migrations/`; never rewrite applied migrations.
+- Migrations: add schema changes only through numbered files in `src/hanger_app/migrations/`; never rewrite applied migrations.
 - Documentation: update `AGENTS.md`, `README.md`, and deployment notes whenever commands, configuration, or workflows change.
 - Observability: prefer structured logs and explicit health checks over silent failures.
 
 ## Suggested Implementation Order
 
 1. Add application and invitation schema.
-2. Implement repository/service layer for application decisions.
-3. Add admin CLI and protected admin routes.
+2. Implement repository and service layer for application decisions.
+3. Add admin CLI commands and protected admin routes.
 4. Disable open registration when invite-only mode is enabled.
 5. Add installation settings and production validation.
 6. Add interview notes and access controls.
 7. Add reporting commands and sanitized exports.
 8. Document deployment, backup, restore, and operational workflows.
 
-# [ES] Proximos Pasos
+## Spanish Summary
 
-## Fase 1: Registro Controlado De usuarios
+Esta hoja de ruta traduce las ideas de `ROADMAP.md` en trabajo técnico concreto para `hanger_app`.
 
-Objetivos: Solo registrar usuarios que pasaron proceso de selección.
+### 1. Registro controlado de usuarios
 
-- Agrega un flujo de trabajo con estados de usuarios: `submitted`, `screening`, `interview`, `accepted`, `rejected`, y `invited`.
-- Guardar respuestas, fechas y notas de inspectores de usuarios.
-- Cambiar de registro abierto a solo con invitacion.
-- Agregar rutas administrativas y comandos para revisar, aceptar, rechazar e invitar usuarios.
-- Agregar eventos de auditoria en cada cambio de estado en la app.
+Solo deben registrarse usuarios que pasen un proceso de selección. Para lograrlo, el proyecto necesita solicitudes de ingreso, estados de revisión, invitaciones de un solo uso, rutas administrativas, comandos CLI y auditoría de cada decisión.
 
-Verificación:
+### 2. Reglas por instalación
 
-- Un usuario sin invitar no puede registrarse.
-- Los usuarios aprovados reciben una sola invitación.
-- Los test cubren detalles comunes de seguridad.
-## Fase 2: 
+Cada servidor debe poder definir sus propios criterios de elegibilidad, límites operativos y configuración sin modificar código. Esto requiere una tabla de configuración, validaciones al iniciar la aplicación y documentación clara para despliegues.
 
-Objetivos: .
+### 3. Entrevistas e investigación
 
-- .
-- .
-- .
-- .
-- .
+El sistema debe ayudar a coordinar entrevistas con posibles usuarios, registrar notas estructuradas y proteger la información sensible. Los reportes deben entregar métricas agregadas sin exponer notas privadas.
 
-Verificación:
+### 4. Preparación operacional y financiamiento
 
-- .
-- .
-- .
-
-## Fase 3: 
-
-Objetivos: .
-
-- .
-- .
-- .
-- .
-
-Verificación:
-
-- .
-- .
-- .
-
-## Fase 4: 
-
-Objetivos: .
-
-- .
-- .
-- .
-- .
-- .
-
-Varificación:
-
-- .
-- .
-- .
-  
-## Prioridad De Conceptos Clave
-
--
--
--
--
--
-
-## Orden De Implementación Sugerido
-
-1. .
-2. .
-3. .
-4. .
-5. .
-6. .
-7. .
-8. .
-
-# [FR] 
-
-## 1
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-## 2
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## 3
-
-: .
-
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## 4
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-  
-## 
-
--
--
--
--
--
-
-## 
-
-1. .
-2. .
-3. .
-4. .
-5. 
-6. .
-7. .
-8. .
-# [PT] 
-
-## Fase 1:
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-## Fase 2: 
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## Fase 3: 
-
-: .
-
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## Fase 4: 
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-  
-##
-
--
--
--
--
--
-
-##
-
-1. .
-2. .
-3. .
-4. .
-5. 
-6. .
-7. .
-8. .
-
-# [DE] 
-
-## Phase 1: 
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-## Phase 2: 
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## Phase 3: 
-
-: .
-
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## Phase 4:
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-  
-##
-
--
--
--
--
--
-
-##
-
-1. .
-2. .
-3. .
-4. .
-5. 
-6. .
-7. .
-8. .
-
-# [ZH] 后续步骤
-
-## 阶段 一: 
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-## 阶段 2:
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## 阶段 3:
-
-: .
-
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## 阶段 4:
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-  
-##
-
--
--
--
--
--
-
-##
-
-1. .
-2. .
-3. .
-4. .
-5. 
-6. .
-7. .
-8. .
-
-# [RU] 
-
-## фаза 1
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-## фаза 2
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## фаза 3
-
-: .
-
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## фаза 4:
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-  
-##
-
--
--
--
--
--
-
-##
-
-1. .
-2. .
-3. .
-4. .
-5. 
-6. .
-7. .
-8. .
-
-# [UK] 
-
-## фаза 1
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-## фаза 2
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## фаза 3
-
-: .
-
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## фаза 4
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-  
-##
-
--
--
--
--
--
-
-##
-
-1. .
-2. .
-3. .
-4. .
-5. 
-6. .
-7. .
-8. .
-
-# [JA] 
-
-## 段階 1
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-## 段階 2
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## 段階 3
-
-: .
-
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-
-## 段階 4
-
-: .
-
-- .
-- .
-- .
-- .
-- .
-
-:
-
-- .
-- .
-- .
-  
-##
-
--
--
--
--
--
-
-##
-
-1. .
-2. .
-3. .
-4. .
-5. 
-6. .
-7. .
-8. .
+El proyecto debe poder mostrar métricas de uso, salud del sistema y evidencia operacional para colaboración externa o financiamiento. También necesita mejores logs, políticas de retención y documentación de respaldo/restauración.
