@@ -11,6 +11,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from .config import Settings
 from .db import Database
 from .repositories import (
+    ApplicationRepository,
     AuditRepository,
     InvitationRepository,
     JobRepository,
@@ -20,7 +21,13 @@ from .repositories import (
     UserRepository,
 )
 from .routes import bp
-from .services import AuthService, DeliveryGateway, InvitationService, JobWorker
+from .services import (
+    ApplicationService,
+    AuthService,
+    DeliveryGateway,
+    InvitationService,
+    JobWorker,
+)
 from .uploads import UploadService
 
 
@@ -40,13 +47,22 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
     users = UserRepository(database)
     rate_limits = RateLimitRepository(database)
     jobs = JobRepository(database)
+    application_repository = ApplicationRepository(database)
     invitation_repository = InvitationRepository(database)
     messages = MessageRepository(database)
     posts = PostRepository(database)
     audit = AuditRepository(database)
     invitations = InvitationService(invitation_repository, jobs)
+    applications = ApplicationService(application_repository, invitations)
     worker = JobWorker(jobs, invitation_repository, DeliveryGateway())
-    auth = AuthService(users, rate_limits, jobs, app.config["PUBLIC_URL"])
+    auth = AuthService(
+        users,
+        rate_limits,
+        jobs,
+        invitation_repository,
+        app.config["PUBLIC_URL"],
+        app.config["REQUIRE_INVITATION"],
+    )
 
     app.extensions["hanger"] = {
         "database": database,
@@ -55,6 +71,8 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
         "jobs": jobs,
         "auth": auth,
         "audit": audit,
+        "applications": applications,
+        "application_repository": application_repository,
         "invitations": invitations,
         "invitation_repository": invitation_repository,
         "messages": messages,
@@ -120,6 +138,89 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
         if not auth.register(username, password, role="admin"):
             raise click.ClickException("Username already exists")
         click.echo(f"Admin created: {username}")
+
+    @app.cli.command("submit-application")
+    @click.option("--username", default="")
+    @click.option("--contact-address", prompt=True)
+    @click.option(
+        "--contact-kind",
+        prompt=True,
+        type=click.Choice(["email", "mail", "phone", "sms", "tel"]),
+    )
+    def submit_application(
+        username: str, contact_address: str, contact_kind: str
+    ) -> None:
+        application, created = applications.submit(
+            username or None, contact_address, contact_kind
+        )
+        if not created or application is None:
+            raise click.ClickException("Application already exists")
+        click.echo(f"Application submitted: {application.id}")
+
+    @app.cli.command("review-applications")
+    @click.option(
+        "--status",
+        type=click.Choice(
+            ["submitted", "screening", "interview", "accepted", "rejected", "invited"]
+        ),
+        default=None,
+    )
+    def review_applications(status: Optional[str]) -> None:
+        for application in applications.list_all(status):
+            click.echo(
+                "\t".join(
+                    [
+                        str(application.id),
+                        application.status,
+                        application.contact_kind,
+                        application.contact_address,
+                        application.username or "",
+                    ]
+                )
+            )
+
+    @app.cli.command("accept-application")
+    @click.argument("application_id", type=int)
+    @click.option("--reviewer", prompt=True)
+    @click.option("--notes", default=None)
+    def accept_application(
+        application_id: int, reviewer: str, notes: Optional[str]
+    ) -> None:
+        if not applications.accept(application_id, reviewer, notes):
+            raise click.ClickException("Application not found")
+        audit.record(reviewer, "application.accept", str(application_id))
+        click.echo(f"Application accepted: {application_id}")
+
+    @app.cli.command("reject-application")
+    @click.argument("application_id", type=int)
+    @click.option("--reviewer", prompt=True)
+    @click.option("--notes", default=None)
+    def reject_application(
+        application_id: int, reviewer: str, notes: Optional[str]
+    ) -> None:
+        if not applications.reject(application_id, reviewer, notes):
+            raise click.ClickException("Application not found")
+        audit.record(reviewer, "application.reject", str(application_id))
+        click.echo(f"Application rejected: {application_id}")
+
+    @app.cli.command("invite-application")
+    @click.argument("application_id", type=int)
+    @click.option("--reviewer", prompt=True)
+    def invite_application(application_id: int, reviewer: str) -> None:
+        try:
+            created = applications.invite(
+                application_id,
+                reviewer,
+                f"{app.config['PUBLIC_URL']}/register",
+            )
+        except LookupError as error:
+            raise click.ClickException(str(error)) from error
+        except ValueError as error:
+            raise click.ClickException(str(error)) from error
+        if not created:
+            raise click.ClickException("Invitation already exists")
+        audit.record(reviewer, "application.invite", str(application_id))
+        click.echo(f"Invitation queued for application: {application_id}")
 
     @app.cli.command("set-role")
     @click.argument("username")

@@ -7,8 +7,9 @@ from email.message import EmailMessage
 from typing import Optional
 from urllib.parse import urlencode
 
-from .models import User
+from .models import Application, User
 from .repositories import (
+    ApplicationRepository,
     InvitationRepository,
     JobRepository,
     RateLimitRepository,
@@ -27,12 +28,16 @@ class AuthService:
         users: UserRepository,
         rate_limits: RateLimitRepository,
         jobs: JobRepository,
+        invitations: InvitationRepository,
         public_url: str,
+        require_invitation: bool = False,
     ):
         self.users = users
         self.rate_limits = rate_limits
         self.jobs = jobs
+        self.invitations = invitations
         self.public_url = public_url
+        self.require_invitation = require_invitation
 
     def register(
         self,
@@ -42,6 +47,7 @@ class AuthService:
         contact_kind: Optional[str] = None,
         contact_address: Optional[str] = None,
         role: str = "user",
+        invitation_token: Optional[str] = None,
     ) -> bool:
         username = username.strip()
         kind = contact_kind.strip().lower() if contact_kind else None
@@ -64,8 +70,28 @@ class AuthService:
             raise ValueError("Invalid phone number")
         if role not in {"user", "admin"}:
             raise ValueError("Unsupported role")
+        password_hash = hash_password(password)
+        if self.require_invitation and role == "user":
+            if not kind or not address:
+                raise ValueError("Contact kind and address are required for invitation")
+            token = invitation_token.strip() if invitation_token else ""
+            if not token:
+                raise ValueError("A valid invitation token is required")
+            created = self.users.create_with_invitation(
+                username,
+                password_hash,
+                age,
+                kind,
+                address,
+                role,
+                hash_token(token),
+                int(time.time()),
+            )
+            if created is None:
+                raise ValueError("Invalid or expired invitation token")
+            return created
         return self.users.create(
-            username, hash_password(password), age, kind, address, role
+            username, password_hash, age, kind, address, role
         )
 
     def login(self, username: str, password: str, client_key: str) -> Optional[User]:
@@ -120,7 +146,14 @@ class InvitationService:
         self.invitations = invitations
         self.jobs = jobs
 
-    def invite(self, address: str, kind: str, registration_url: str) -> bool:
+    def invite(
+        self,
+        address: str,
+        kind: str,
+        registration_url: str,
+        application_id: Optional[int] = None,
+        ttl_seconds: int = 7 * 24 * 60 * 60,
+    ) -> bool:
         normalized_address = address.strip()
         normalized_kind = kind.strip().lower()
         if not normalized_address or normalized_kind not in {
@@ -131,16 +164,102 @@ class InvitationService:
             "tel",
         }:
             raise ValueError("A supported contact address and kind are required")
+        token = secrets.token_urlsafe(32)
+        separator = "&" if "?" in registration_url else "?"
+        url = f"{registration_url}{separator}{urlencode({'token': token})}"
         return self.invitations.add_with_job(
             normalized_address,
             normalized_kind,
             {
                 "address": normalized_address,
                 "kind": normalized_kind,
-                "registration_url": registration_url,
+                "registration_url": url,
             },
             f"invitation:{normalized_kind}:{normalized_address.lower()}",
+            hash_token(token),
+            int(time.time()) + ttl_seconds,
+            application_id,
         )
+
+
+class ApplicationService:
+    def __init__(
+        self,
+        applications: ApplicationRepository,
+        invitations: InvitationService,
+    ):
+        self.applications = applications
+        self.invitations = invitations
+
+    @staticmethod
+    def _normalize_contact(address: str, kind: str) -> tuple[str, str]:
+        normalized_address = address.strip()
+        normalized_kind = kind.strip().lower()
+        if not normalized_address or normalized_kind not in {
+            "email",
+            "mail",
+            "phone",
+            "sms",
+            "tel",
+        }:
+            raise ValueError("A supported contact address and kind are required")
+        if normalized_kind in {"email", "mail"} and not re.fullmatch(
+            r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized_address
+        ):
+            raise ValueError("Invalid email address")
+        if normalized_kind in {"phone", "sms", "tel"} and not re.fullmatch(
+            r"\+?[1-9]\d{7,14}", normalized_address
+        ):
+            raise ValueError("Invalid phone number")
+        return normalized_address, normalized_kind
+
+    def submit(
+        self,
+        username: Optional[str],
+        contact_address: str,
+        contact_kind: str,
+        answers: Optional[dict] = None,
+    ) -> tuple[Optional[Application], bool]:
+        address, kind = self._normalize_contact(contact_address, contact_kind)
+        normalized_username = username.strip() if username else None
+        return self.applications.create(normalized_username, address, kind, answers)
+
+    def list_all(self, status: Optional[str] = None) -> list[Application]:
+        return self.applications.list_all(status)
+
+    def accept(
+        self, application_id: int, reviewer_username: str, notes: Optional[str] = None
+    ) -> bool:
+        return self.applications.transition(
+            application_id, "accepted", reviewer_username, notes
+        )
+
+    def reject(
+        self, application_id: int, reviewer_username: str, notes: Optional[str] = None
+    ) -> bool:
+        return self.applications.transition(
+            application_id, "rejected", reviewer_username, notes
+        )
+
+    def invite(
+        self, application_id: int, reviewer_username: str, registration_url: str
+    ) -> bool:
+        application = self.applications.get(application_id)
+        if application is None:
+            raise LookupError("Application not found")
+        if application.status == "invited":
+            return False
+        if application.status != "accepted":
+            raise ValueError("Only accepted applications can be invited")
+        created = self.invitations.invite(
+            application.contact_address,
+            application.contact_kind,
+            registration_url,
+            application.id,
+        )
+        if created:
+            self.applications.transition(application.id, "invited", reviewer_username)
+        return created
 
 
 class DeliveryGateway:

@@ -106,6 +106,133 @@ def test_worker_completes_invitation(app):
     assert invitation["status"] == "sent"
 
 
+def test_invite_only_registration_requires_valid_token(app):
+    services = app.extensions["hanger"]
+    services["auth"].require_invitation = True
+
+    with pytest.raises(ValueError, match="invitation token"):
+        services["auth"].register(
+            "guest",
+            PASSWORD,
+            30,
+            "email",
+            "guest@example.com",
+        )
+
+    with pytest.raises(ValueError, match="Invalid or expired"):
+        services["auth"].register(
+            "guest",
+            PASSWORD,
+            30,
+            "email",
+            "guest@example.com",
+            invitation_token="wrong-token",
+        )
+
+
+def test_invitation_token_is_single_use(app):
+    services = app.extensions["hanger"]
+    services["auth"].require_invitation = True
+    assert services["invitations"].invite(
+        "guest@example.com", "email", "http://test.local/register"
+    )
+    job = services["jobs"].list_all()[0]
+    payload = json.loads(job["payload_json"])
+    token = parse_qs(urlparse(payload["registration_url"]).query)["token"][0]
+
+    assert services["auth"].register(
+        "guest",
+        PASSWORD,
+        30,
+        "email",
+        "guest@example.com",
+        invitation_token=token,
+    )
+    with pytest.raises(ValueError, match="Invalid or expired"):
+        services["auth"].register(
+            "guest",
+            PASSWORD,
+            30,
+            "email",
+            "guest@example.com",
+            invitation_token=token,
+        )
+    with pytest.raises(ValueError, match="Invalid or expired"):
+        services["auth"].register(
+            "other",
+            PASSWORD,
+            30,
+            "email",
+            "guest@example.com",
+            invitation_token=token,
+        )
+    invitation = services["invitation_repository"].list_all()[0]
+    assert invitation["status"] == "used"
+    assert invitation["used_at"] is not None
+
+
+def test_expired_invitation_token_is_rejected(app):
+    services = app.extensions["hanger"]
+    services["auth"].require_invitation = True
+    assert services["invitations"].invite(
+        "late@example.com",
+        "email",
+        "http://test.local/register",
+        ttl_seconds=-1,
+    )
+    job = services["jobs"].list_all()[0]
+    payload = json.loads(job["payload_json"])
+    token = parse_qs(urlparse(payload["registration_url"]).query)["token"][0]
+
+    with pytest.raises(ValueError, match="Invalid or expired"):
+        services["auth"].register(
+            "late",
+            PASSWORD,
+            30,
+            "email",
+            "late@example.com",
+            invitation_token=token,
+        )
+
+
+def test_rejected_application_cannot_be_invited(app):
+    services = app.extensions["hanger"]
+    assert services["auth"].register("admin", PASSWORD, role="admin")
+    application, created = services["applications"].submit(
+        "guest", "guest@example.com", "email"
+    )
+    assert created
+    assert application is not None
+    assert services["applications"].reject(application.id, "admin", "no fit")
+
+    with pytest.raises(ValueError, match="Only accepted"):
+        services["applications"].invite(
+            application.id, "admin", "http://test.local/register"
+        )
+    assert services["jobs"].list_all() == []
+
+
+def test_accepted_application_can_be_invited_once(app):
+    services = app.extensions["hanger"]
+    assert services["auth"].register("admin", PASSWORD, role="admin")
+    application, created = services["applications"].submit(
+        "guest", "guest@example.com", "email"
+    )
+    assert created
+    assert application is not None
+    assert services["applications"].accept(application.id, "admin", "good fit")
+
+    assert services["applications"].invite(
+        application.id, "admin", "http://test.local/register"
+    )
+    assert not services["applications"].invite(
+        application.id, "admin", "http://test.local/register"
+    )
+    invited = services["application_repository"].get(application.id)
+    assert invited is not None
+    assert invited.status == "invited"
+
+
 def test_abandoned_running_job_is_reclaimed(app):
     services = app.extensions["hanger"]
     services["invitations"].invite("stale@example.com", "email", "http://test/register")

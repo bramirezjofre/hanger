@@ -83,7 +83,9 @@ def logout():
 @bp.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "GET":
-        return render_template("register.html")
+        return render_template(
+            "register.html", invitation_token=request.args.get("token", "")
+        )
     _limit("register", 5, 3600)
     password = request.form.get("password", "")
     if password != request.form.get("password_confirmation", ""):
@@ -97,6 +99,7 @@ def register():
             age,
             request.form.get("contact_kind", ""),
             request.form.get("contact_address", ""),
+            invitation_token=request.form.get("invitation_token", ""),
         )
     except ValueError as error:
         return render_template("error.html", message=str(error)), 400
