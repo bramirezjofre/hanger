@@ -16,6 +16,7 @@ class Settings:
     production: bool
     auto_migrate: bool
     trust_proxy: bool
+    require_invitation: bool
     max_upload_bytes: int = 5 * 1024 * 1024
 
     @classmethod
@@ -48,6 +49,10 @@ class Settings:
             ).lower()
             == "true",
             trust_proxy=values.get("HANGER_TRUST_PROXY", "false").lower() == "true",
+            require_invitation=values.get(
+                "HANGER_REQUIRE_INVITATION", "true" if production else "false"
+            ).lower()
+            == "true",
         )
 
     def flask_config(self) -> dict:
@@ -59,6 +64,7 @@ class Settings:
             "MAX_CONTENT_LENGTH": self.max_upload_bytes,
             "AUTO_MIGRATE": self.auto_migrate,
             "TRUST_PROXY": self.trust_proxy,
+            "REQUIRE_INVITATION": self.require_invitation,
             "SESSION_COOKIE_HTTPONLY": True,
             "SESSION_COOKIE_SAMESITE": "Lax",
             "SESSION_COOKIE_SECURE": self.production,

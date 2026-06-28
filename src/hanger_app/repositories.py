@@ -5,7 +5,7 @@ import uuid
 from typing import Optional
 
 from .db import Database
-from .models import Job, Message, Post, User
+from .models import Application, Job, Message, Post, User
 
 
 class UserRepository:
@@ -31,6 +31,64 @@ class UserRepository:
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (username, password_hash, age, contact_kind, contact_address, role),
+                )
+        except sqlite3.IntegrityError:
+            return False
+        return True
+
+    def create_with_invitation(
+        self,
+        username: str,
+        password_hash: str,
+        age: Optional[int],
+        contact_kind: Optional[str],
+        contact_address: Optional[str],
+        role: str,
+        invitation_token_hash: str,
+        now: int,
+    ) -> Optional[bool]:
+        try:
+            with self.database.transaction(immediate=True) as connection:
+                invitation = connection.execute(
+                    """
+                    SELECT id, contact_address, contact_kind
+                    FROM invitations
+                    WHERE token_hash = ?
+                        AND used_at IS NULL
+                        AND (expires_at IS NULL OR expires_at >= ?)
+                    """,
+                    (invitation_token_hash, now),
+                ).fetchone()
+                if invitation is None:
+                    return None
+                if contact_kind and invitation["contact_kind"] != contact_kind:
+                    return None
+                if contact_address and invitation["contact_address"] != contact_address:
+                    return None
+
+                connection.execute(
+                    """
+                    INSERT INTO users
+                        (username, password_hash, age, contact_kind,
+                         contact_address, role)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        username,
+                        password_hash,
+                        age,
+                        contact_kind,
+                        contact_address,
+                        role,
+                    ),
+                )
+                connection.execute(
+                    """
+                    UPDATE invitations
+                    SET status = 'used', used_at = ?
+                    WHERE id = ?
+                    """,
+                    (now, invitation["id"]),
                 )
         except sqlite3.IntegrityError:
             return False
@@ -156,6 +214,123 @@ class AuditRepository:
             )
 
 
+class ApplicationRepository:
+    VALID_STATUSES = {
+        "submitted",
+        "screening",
+        "interview",
+        "accepted",
+        "rejected",
+        "invited",
+    }
+
+    def __init__(self, database: Database):
+        self.database = database
+
+    @staticmethod
+    def _application_from_row(row: sqlite3.Row) -> Application:
+        data = dict(row)
+        data["answers"] = json.loads(data.pop("answers_json"))
+        return Application(**data)
+
+    def create(
+        self,
+        username: Optional[str],
+        contact_address: str,
+        contact_kind: str,
+        answers: Optional[dict] = None,
+    ) -> tuple[Optional[Application], bool]:
+        try:
+            with self.database.transaction() as connection:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO applications
+                        (username, contact_address, contact_kind, answers_json)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        username,
+                        contact_address,
+                        contact_kind,
+                        json.dumps(answers or {}),
+                    ),
+                )
+                row = connection.execute(
+                    """
+                    SELECT id, username, contact_address, contact_kind,
+                           answers_json, reviewer_notes, reviewer_id, status,
+                           decided_at, created_at, updated_at
+                    FROM applications WHERE id = ?
+                    """,
+                    (cursor.lastrowid,),
+                ).fetchone()
+        except sqlite3.IntegrityError:
+            return None, False
+        return self._application_from_row(row), True
+
+    def get(self, application_id: int) -> Optional[Application]:
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT id, username, contact_address, contact_kind, answers_json,
+                       reviewer_notes, reviewer_id, status, decided_at, created_at,
+                       updated_at
+                FROM applications WHERE id = ?
+                """,
+                (application_id,),
+            ).fetchone()
+        return self._application_from_row(row) if row else None
+
+    def list_all(self, status: Optional[str] = None) -> list[Application]:
+        parameters: tuple = ()
+        where = ""
+        if status:
+            if status not in self.VALID_STATUSES:
+                raise ValueError("Unsupported application status")
+            where = "WHERE status = ?"
+            parameters = (status,)
+        with self.database.transaction() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT id, username, contact_address, contact_kind, answers_json,
+                       reviewer_notes, reviewer_id, status, decided_at, created_at,
+                       updated_at
+                FROM applications
+                {where}
+                ORDER BY id DESC
+                """,
+                parameters,
+            ).fetchall()
+        return [self._application_from_row(row) for row in rows]
+
+    def transition(
+        self,
+        application_id: int,
+        status: str,
+        reviewer_username: str,
+        notes: Optional[str] = None,
+    ) -> bool:
+        if status not in self.VALID_STATUSES:
+            raise ValueError("Unsupported application status")
+        decided_at = "unixepoch()" if status in {"accepted", "rejected"} else "NULL"
+        with self.database.transaction() as connection:
+            result = connection.execute(
+                f"""
+                UPDATE applications
+                SET status = ?,
+                    reviewer_notes = COALESCE(?, reviewer_notes),
+                    reviewer_id = (
+                        SELECT id FROM users WHERE username = ?
+                    ),
+                    decided_at = {decided_at},
+                    updated_at = unixepoch()
+                WHERE id = ?
+                """,
+                (status, notes, reviewer_username, application_id),
+            )
+        return result.rowcount == 1
+
+
 class InvitationRepository:
     def __init__(self, database: Database):
         self.database = database
@@ -186,6 +361,9 @@ class InvitationRepository:
         kind: str,
         payload: dict,
         idempotency_key: str,
+        token_hash: Optional[str] = None,
+        expires_at: Optional[int] = None,
+        application_id: Optional[int] = None,
     ) -> bool:
         try:
             with self.database.transaction(immediate=True) as connection:
@@ -200,10 +378,12 @@ class InvitationRepository:
                     return False
                 cursor = connection.execute(
                     """
-                    INSERT INTO invitations (contact_address, contact_kind)
-                    VALUES (?, ?)
+                    INSERT INTO invitations
+                        (contact_address, contact_kind, token_hash, expires_at,
+                         application_id)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
-                    (address, kind),
+                    (address, kind, token_hash, expires_at, application_id),
                 )
                 payload["invitation_id"] = cursor.lastrowid
                 connection.execute(
@@ -221,7 +401,8 @@ class InvitationRepository:
         with self.database.transaction() as connection:
             rows = connection.execute(
                 """
-                SELECT id, contact_address, contact_kind, status, created_at, sent_at
+                SELECT id, contact_address, contact_kind, status, created_at, sent_at,
+                       application_id, expires_at, used_at
                 FROM invitations ORDER BY id DESC
                 """
             ).fetchall()
@@ -235,6 +416,17 @@ class InvitationRepository:
                 WHERE id = ?
                 """,
                 (invitation_id,),
+            )
+
+    def link_application_invited(self, application_id: int) -> None:
+        with self.database.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE applications
+                SET status = 'invited', updated_at = unixepoch()
+                WHERE id = ?
+                """,
+                (application_id,),
             )
 
 

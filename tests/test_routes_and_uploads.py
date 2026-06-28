@@ -60,6 +60,77 @@ def test_registration_login_and_health(app, client, csrf):
     assert client.get("/health/ready").status_code == 200
 
 
+def test_invite_only_register_route_requires_token(app, client, csrf):
+    app.extensions["hanger"]["auth"].require_invitation = True
+    blocked = client.post(
+        "/register",
+        data={
+            "csrf_token": csrf,
+            "username": "guest",
+            "age": "30",
+            "contact_kind": "email",
+            "contact_address": "guest@example.com",
+            "password": PASSWORD,
+            "password_confirmation": PASSWORD,
+        },
+    )
+    assert blocked.status_code == 400
+    assert b"invitation token" in blocked.data
+
+    assert app.extensions["hanger"]["invitations"].invite(
+        "guest@example.com", "email", "http://test.local/register"
+    )
+    job = app.extensions["hanger"]["jobs"].list_all()[0]
+    payload = json.loads(job["payload_json"])
+    token = parse_qs(urlparse(payload["registration_url"]).query)["token"][0]
+    allowed = client.post(
+        "/register",
+        data={
+            "csrf_token": csrf,
+            "invitation_token": token,
+            "username": "guest",
+            "age": "30",
+            "contact_kind": "email",
+            "contact_address": "guest@example.com",
+            "password": PASSWORD,
+            "password_confirmation": PASSWORD,
+        },
+    )
+    assert allowed.status_code == 302
+    assert app.extensions["hanger"]["users"].get("guest") is not None
+
+
+def test_application_cli_accepts_and_invites(app):
+    runner = app.test_cli_runner()
+    assert app.extensions["hanger"]["auth"].register("admin", PASSWORD, role="admin")
+
+    submitted = runner.invoke(
+        args=[
+            "submit-application",
+            "--username",
+            "guest",
+            "--contact-address",
+            "guest@example.com",
+            "--contact-kind",
+            "email",
+        ]
+    )
+    assert submitted.exit_code == 0
+    assert "Application submitted: 1" in submitted.output
+
+    accepted = runner.invoke(
+        args=["accept-application", "1", "--reviewer", "admin", "--notes", "good fit"]
+    )
+    assert accepted.exit_code == 0
+
+    invited = runner.invoke(args=["invite-application", "1", "--reviewer", "admin"])
+    assert invited.exit_code == 0
+    application = app.extensions["hanger"]["application_repository"].get(1)
+    assert application is not None
+    assert application.status == "invited"
+    assert len(app.extensions["hanger"]["jobs"].list_all()) == 1
+
+
 def test_chat_requires_existing_receiver_and_protects_attachment(app, client, csrf):
     create_user(app, "alice")
     create_user(app, "bob")

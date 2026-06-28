@@ -3,6 +3,21 @@ from typing import Optional
 
 
 @dataclass(frozen=True)
+class Application:
+    id: int
+    username: Optional[str]
+    contact_address: str
+    contact_kind: str
+    answers: dict
+    reviewer_notes: Optional[str]
+    reviewer_id: Optional[int]
+    status: str
+    decided_at: Optional[int]
+    created_at: int
+    updated_at: int
+
+
+@dataclass(frozen=True)
 class User:
     id: int
     username: str
