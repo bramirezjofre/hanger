@@ -23,6 +23,10 @@ poetry run flask --app hanger_app:create_app run --debug
 
 Run `poetry run flask --app hanger_app:create_app process-jobs --watch` to process queued deliveries. Use `poetry run python -m compileall -q src tests` as the minimum syntax check. Add schema changes as a new numbered file in `src/hanger_app/migrations/`; never rewrite an applied migration.
 
+Use `poetry run flask --app hanger_app:create_app settings-list` and
+`settings-set <key> <json-value>` to manage per-installation settings such as
+`branding.site_name` or `eligibility.minimum_age`.
+
 ## Coding Style & Naming Conventions
 
 Use four-space indentation and follow PEP 8. Name functions and variables with `snake_case`, classes with `PascalCase`, and constants with `UPPER_SNAKE_CASE`. Add type hints to public methods and route return values. Keep Flask route handlers small; move reusable behavior into `src/hanger_app/services.py`. Prefer `pathlib.Path` and repository-relative paths instead of hard-coded locations. Never interpolate user input into SQL or HTML.

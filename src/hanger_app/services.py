@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 from .models import Application, User
 from .repositories import (
     ApplicationRepository,
+    InstallationSettingsRepository,
     InvitationRepository,
     JobRepository,
     RateLimitRepository,
@@ -260,6 +261,70 @@ class ApplicationService:
         if created:
             self.applications.transition(application.id, "invited", reviewer_username)
         return created
+
+
+class InstallationSettingsService:
+    CONTACT_KINDS = {"email", "mail", "phone", "sms", "tel"}
+    PUBLIC_KEYS = {
+        "branding.site_name",
+        "branding.support_contact",
+        "branding.logo_url",
+    }
+
+    def __init__(self, settings: InstallationSettingsRepository):
+        self.settings = settings
+
+    def list_all(self, public_only: bool = False):
+        return self.settings.list_all(public_only)
+
+    def get(self, key: str):
+        self._validate_key(key)
+        return self.settings.get(key)
+
+    def set(self, key: str, value: object):
+        normalized = self._normalize_value(key, value)
+        return self.settings.set(key, normalized, key in self.PUBLIC_KEYS)
+
+    def _validate_key(self, key: str) -> None:
+        if key not in {
+            "branding.site_name",
+            "branding.support_contact",
+            "branding.logo_url",
+            "eligibility.minimum_age",
+            "eligibility.allowed_contact_kinds",
+            "eligibility.application_prompt",
+        }:
+            raise ValueError("Unsupported installation setting")
+
+    def _normalize_value(self, key: str, value: object) -> object:
+        self._validate_key(key)
+        if key == "eligibility.minimum_age":
+            if not isinstance(value, int) or not 1 <= value <= 130:
+                raise ValueError(
+                    "eligibility.minimum_age must be an integer from 1 to 130"
+                )
+            return value
+        if key == "eligibility.allowed_contact_kinds":
+            if not isinstance(value, list) or not value:
+                raise ValueError(
+                    "eligibility.allowed_contact_kinds must be a non-empty list"
+                )
+            normalized = []
+            for item in value:
+                if not isinstance(item, str):
+                    raise ValueError("Contact kinds must be strings")
+                contact_kind = item.strip().lower()
+                if contact_kind not in self.CONTACT_KINDS:
+                    raise ValueError("Unsupported contact kind")
+                if contact_kind not in normalized:
+                    normalized.append(contact_kind)
+            return normalized
+        if not isinstance(value, str):
+            raise ValueError(f"{key} must be a string")
+        normalized_text = value.strip()
+        if len(normalized_text) > 2000:
+            raise ValueError(f"{key} must be 2000 characters or fewer")
+        return normalized_text
 
 
 class DeliveryGateway:

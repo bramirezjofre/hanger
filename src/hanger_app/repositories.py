@@ -5,7 +5,7 @@ import uuid
 from typing import Optional
 
 from .db import Database
-from .models import Application, Job, Message, Post, User
+from .models import Application, InstallationSetting, Job, Message, Post, User
 
 
 class UserRepository:
@@ -329,6 +329,68 @@ class ApplicationRepository:
                 (status, notes, reviewer_username, application_id),
             )
         return result.rowcount == 1
+
+
+class InstallationSettingsRepository:
+    def __init__(self, database: Database):
+        self.database = database
+
+    @staticmethod
+    def _setting_from_row(row: sqlite3.Row) -> InstallationSetting:
+        return InstallationSetting(
+            key=row["key"],
+            value=json.loads(row["value_json"]),
+            is_public=bool(row["is_public"]),
+            updated_at=row["updated_at"],
+        )
+
+    def get(self, key: str) -> Optional[InstallationSetting]:
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT key, value_json, is_public, updated_at
+                FROM installation_settings
+                WHERE key = ?
+                """,
+                (key,),
+            ).fetchone()
+        return self._setting_from_row(row) if row else None
+
+    def list_all(self, public_only: bool = False) -> list[InstallationSetting]:
+        where = "WHERE is_public = 1" if public_only else ""
+        with self.database.transaction() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT key, value_json, is_public, updated_at
+                FROM installation_settings
+                {where}
+                ORDER BY key
+                """
+            ).fetchall()
+        return [self._setting_from_row(row) for row in rows]
+
+    def set(
+        self, key: str, value: object, is_public: bool = False
+    ) -> InstallationSetting:
+        value_json = json.dumps(value, sort_keys=True)
+        public_value = 1 if is_public else 0
+        with self.database.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO installation_settings
+                    (key, value_json, is_public, updated_at)
+                VALUES (?, ?, ?, unixepoch())
+                ON CONFLICT(key) DO UPDATE SET
+                    value_json = excluded.value_json,
+                    is_public = excluded.is_public,
+                    updated_at = unixepoch()
+                """,
+                (key, value_json, public_value),
+            )
+        setting = self.get(key)
+        if setting is None:
+            raise RuntimeError("Installation setting was not persisted")
+        return setting
 
 
 class InvitationRepository:
