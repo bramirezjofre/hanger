@@ -13,6 +13,7 @@ from .db import Database
 from .repositories import (
     ApplicationRepository,
     AuditRepository,
+    InstallationSettingsRepository,
     InvitationRepository,
     JobRepository,
     MessageRepository,
@@ -25,6 +26,7 @@ from .services import (
     ApplicationService,
     AuthService,
     DeliveryGateway,
+    InstallationSettingsService,
     InvitationService,
     JobWorker,
 )
@@ -48,12 +50,16 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
     rate_limits = RateLimitRepository(database)
     jobs = JobRepository(database)
     application_repository = ApplicationRepository(database)
+    installation_settings_repository = InstallationSettingsRepository(database)
     invitation_repository = InvitationRepository(database)
     messages = MessageRepository(database)
     posts = PostRepository(database)
     audit = AuditRepository(database)
     invitations = InvitationService(invitation_repository, jobs)
     applications = ApplicationService(application_repository, invitations)
+    installation_settings = InstallationSettingsService(
+        installation_settings_repository
+    )
     worker = JobWorker(jobs, invitation_repository, DeliveryGateway())
     auth = AuthService(
         users,
@@ -73,6 +79,8 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
         "audit": audit,
         "applications": applications,
         "application_repository": application_repository,
+        "installation_settings": installation_settings,
+        "installation_settings_repository": installation_settings_repository,
         "invitations": invitations,
         "invitation_repository": invitation_repository,
         "messages": messages,
@@ -230,6 +238,42 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
             raise click.ClickException("User not found")
         click.echo(f"Updated {username} to {role}")
 
+    @app.cli.command("settings-list")
+    @click.option("--public-only", is_flag=True)
+    def settings_list(public_only: bool) -> None:
+        for setting in installation_settings.list_all(public_only):
+            click.echo(
+                "\t".join(
+                    [
+                        setting.key,
+                        json_dumps(setting.value),
+                        "public" if setting.is_public else "private",
+                    ]
+                )
+            )
+
+    @app.cli.command("settings-get")
+    @click.argument("key")
+    def settings_get(key: str) -> None:
+        try:
+            setting = installation_settings.get(key)
+        except ValueError as error:
+            raise click.ClickException(str(error)) from error
+        if setting is None:
+            raise click.ClickException("Installation setting not found")
+        click.echo(json_dumps(setting.value))
+
+    @app.cli.command("settings-set")
+    @click.argument("key")
+    @click.argument("value")
+    def settings_set(key: str, value: str) -> None:
+        try:
+            parsed_value = parse_setting_value(value)
+            setting = installation_settings.set(key, parsed_value)
+        except ValueError as error:
+            raise click.ClickException(str(error)) from error
+        click.echo(f"Updated {setting.key}: {json_dumps(setting.value)}")
+
     @app.get("/health/live")
     def health_live():
         return {"status": "ok"}
@@ -245,3 +289,18 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
 
     app.register_blueprint(bp)
     return app
+
+
+def parse_setting_value(value: str):
+    import json
+
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return value
+
+
+def json_dumps(value: object) -> str:
+    import json
+
+    return json.dumps(value, sort_keys=True)

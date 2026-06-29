@@ -18,6 +18,24 @@ def test_production_requires_explicit_persistent_storage():
         Settings.from_env({"HANGER_ENV": "production", "HANGER_SECRET_KEY": "secret"})
 
 
+def test_production_requires_explicit_runtime_settings():
+    with pytest.raises(RuntimeError, match="HANGER_REQUIRE_INVITATION"):
+        Settings.from_env(
+            {
+                "HANGER_ENV": "production",
+                "HANGER_SECRET_KEY": "secret",
+                "HANGER_DB_PATH": "/tmp/hanger.sqlite3",
+                "HANGER_UPLOAD_DIR": "/tmp/uploads",
+                "HANGER_PUBLIC_URL": "https://hanger.example",
+            }
+        )
+
+
+def test_invalid_upload_limit_is_rejected():
+    with pytest.raises(RuntimeError, match="HANGER_MAX_UPLOAD_BYTES"):
+        Settings.from_env({"HANGER_MAX_UPLOAD_BYTES": "0"})
+
+
 def test_app_factories_do_not_share_services(tmp_path, monkeypatch):
     monkeypatch.setenv("HANGER_ENV", "development")
     first = create_app(
@@ -49,7 +67,7 @@ def test_migrations_are_idempotent(app):
         applied = connection.execute(
             "SELECT COUNT(*) FROM schema_migrations"
         ).fetchone()[0]
-    assert applied == 3
+    assert applied == 4
 
 
 def test_operational_cli_commands(app):
@@ -71,6 +89,30 @@ def test_operational_cli_commands(app):
     assert app.extensions["hanger"]["users"].get("operator").role == "user"
     assert runner.invoke(args=["db-upgrade"]).exit_code == 0
     assert runner.invoke(args=["process-jobs", "--limit", "1"]).exit_code == 0
+
+
+def test_installation_settings_defaults_and_cli(app):
+    services = app.extensions["hanger"]
+    settings = services["installation_settings"]
+
+    site_name = settings.get("branding.site_name")
+    assert site_name is not None
+    assert site_name.value == "Hanger"
+    assert site_name.is_public
+
+    runner = app.test_cli_runner()
+    listed = runner.invoke(args=["settings-list", "--public-only"])
+    assert listed.exit_code == 0
+    assert "branding.site_name" in listed.output
+    assert "eligibility.minimum_age" not in listed.output
+
+    updated = runner.invoke(args=["settings-set", "eligibility.minimum_age", "21"])
+    assert updated.exit_code == 0
+    assert settings.get("eligibility.minimum_age").value == 21
+
+    rejected = runner.invoke(args=["settings-set", "eligibility.minimum_age", "0"])
+    assert rejected.exit_code != 0
+    assert "integer from 1 to 130" in rejected.output
 
 
 def test_v2_migration_preserves_valid_social_data(tmp_path):
