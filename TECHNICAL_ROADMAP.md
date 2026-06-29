@@ -107,7 +107,15 @@ Solo deben registrarse usuarios que pasen un proceso de selección. Para lograrl
 
 ### 2. Reglas por instalación
 
+<<<<<<< HEAD
 Cada servidor debe poder definir sus propios criterios de elegibilidad, límites operativos y configuración sin modificar código. Esto requiere una tabla de configuración, validaciones al iniciar la aplicación y documentación clara para despliegues.
+=======
+- Un usuario sin invitar no puede registrarse.
+- Los usuarios aprovados reciben una sola invitación.
+- Los test cubren detalles comunes de seguridad.
+
+## Fase 2: Requisitos de Pre-Instalación
+>>>>>>> 9e301ca (Fix MARKDOWNS file Structure)
 
 ### 3. Entrevistas e investigación
 
@@ -115,4 +123,10 @@ El sistema debe ayudar a coordinar entrevistas con posibles usuarios, registrar 
 
 ### 4. Preparación operacional y financiamiento
 
+<<<<<<< HEAD
 El proyecto debe poder mostrar métricas de uso, salud del sistema y evidencia operacional para colaboración externa o financiamiento. También necesita mejores logs, políticas de retención y documentación de respaldo/restauración.
+=======
+- .
+- .
+- .
+>>>>>>> 9e301ca (Fix MARKDOWNS file Structure)

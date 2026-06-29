@@ -35,6 +35,7 @@ poetry run ruff check src tests
 Schema changes belong in numbered SQL files under `src/hanger_app/migrations/`.
 Development applies them automatically; production must run `db-upgrade` once before web
 workers start. Build the included `Dockerfile` for Gunicorn deployment. Health
+<<<<<<< HEAD
 checks are available at `/health/live` and `/health/ready`.
 
 Per-installation settings are stored in SQLite and managed with the
@@ -42,3 +43,6 @@ Per-installation settings are stored in SQLite and managed with the
 settings include `branding.site_name`, `branding.support_contact`,
 `branding.logo_url`, `eligibility.minimum_age`,
 `eligibility.allowed_contact_kinds`, and `eligibility.application_prompt`.
+=======
+checks are available at `/health/live` and `/health/ready`.
+>>>>>>> 9e301ca (Fix MARKDOWNS file Structure)
