@@ -28,6 +28,9 @@ poetry run flask --app hanger_app:create_app create-admin
 poetry run flask --app hanger_app:create_app process-jobs --watch
 poetry run flask --app hanger_app:create_app settings-list
 poetry run flask --app hanger_app:create_app settings-set eligibility.minimum_age 21
+poetry run flask --app hanger_app:create_app schedule-interview 1
+poetry run flask --app hanger_app:create_app add-interview-note 1
+poetry run flask --app hanger_app:create_app research-export
 poetry run pytest -q
 poetry run ruff check src tests
 ```
@@ -42,3 +45,7 @@ Per-installation settings are stored in SQLite and managed with the
 settings include `branding.site_name`, `branding.support_contact`,
 `branding.logo_url`, `eligibility.minimum_age`,
 `eligibility.allowed_contact_kinds`, and `eligibility.application_prompt`.
+
+Interview workflow commands let admins schedule applicant interviews, assigned
+interviewers record structured notes, and maintainers export aggregate research
+metrics without exposing private note text by default.

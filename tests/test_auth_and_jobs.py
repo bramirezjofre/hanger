@@ -212,6 +212,26 @@ def test_rejected_application_cannot_be_invited(app):
     assert services["jobs"].list_all() == []
 
 
+def test_application_decisions_require_admin_and_duplicate_contacts_are_rejected(app):
+    services = app.extensions["hanger"]
+    assert services["auth"].register("reviewer", PASSWORD)
+    application, created = services["applications"].submit(
+        "guest", "guest@example.com", "email"
+    )
+    assert created
+
+    duplicate, duplicate_created = services["applications"].submit(
+        "guest2", "guest@example.com", "email"
+    )
+
+    assert duplicate is None
+    assert not duplicate_created
+    assert application is not None
+    with pytest.raises(PermissionError, match="admin reviewer"):
+        services["applications"].accept(application.id, "reviewer", "ok")
+    assert services["application_repository"].get(application.id).status == "submitted"
+
+
 def test_accepted_application_can_be_invited_once(app):
     services = app.extensions["hanger"]
     assert services["auth"].register("admin", PASSWORD, role="admin")
@@ -231,6 +251,63 @@ def test_accepted_application_can_be_invited_once(app):
     invited = services["application_repository"].get(application.id)
     assert invited is not None
     assert invited.status == "invited"
+
+
+def test_interview_pipeline_restricts_notes_and_exports_metrics(app):
+    services = app.extensions["hanger"]
+    assert services["auth"].register("admin", PASSWORD, role="admin")
+    assert services["auth"].register("interviewer", PASSWORD)
+    assert services["auth"].register("outsider", PASSWORD)
+    application, created = services["applications"].submit(
+        "guest", "guest@example.com", "email"
+    )
+    assert created
+    assert application is not None
+
+    scheduled = services["applications"].schedule_interview(
+        application.id,
+        "admin",
+        "video",
+        "weekday afternoons",
+        "interviewer",
+    )
+
+    assert scheduled
+    stored = services["application_repository"].get(application.id)
+    assert stored is not None
+    assert stored.status == "interview"
+    assert stored.interview_status == "scheduled"
+    assert stored.interviewer_username == "interviewer"
+
+    note = services["applications"].add_interview_note(
+        application.id,
+        "interviewer",
+        "motivation",
+        "Strong reason to join.",
+    )
+
+    assert note.category == "motivation"
+    assert services["applications"].list_interview_notes(application.id, "admin") == [
+        note
+    ]
+    with pytest.raises(PermissionError):
+        services["applications"].list_interview_notes(application.id, "outsider")
+
+    assert services["applications"].complete_interview(application.id, "interviewer")
+    metrics = services["applications"].research_metrics()
+    assert metrics["applications_by_status"]["interview"] == 1
+    assert metrics["interviews_by_status"]["completed"] == 1
+    assert metrics["interview_notes_by_category"]["motivation"] == 1
+    assert "Strong reason to join." not in json.dumps(metrics)
+
+    with services["database"].transaction() as connection:
+        actions = {
+            row["action"]
+            for row in connection.execute("SELECT action FROM audit_log").fetchall()
+        }
+    assert "application.interview.schedule" in actions
+    assert "application.interview.note.create" in actions
+    assert "application.interview.complete" in actions
 
 
 def test_abandoned_running_job_is_reclaimed(app):

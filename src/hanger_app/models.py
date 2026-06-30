@@ -12,9 +12,25 @@ class Application:
     reviewer_notes: Optional[str]
     reviewer_id: Optional[int]
     status: str
+    interview_contact_method: Optional[str]
+    interview_preferred_times: Optional[str]
+    interviewer_id: Optional[int]
+    interviewer_username: Optional[str]
+    interview_status: str
     decided_at: Optional[int]
     created_at: int
     updated_at: int
+
+
+@dataclass(frozen=True)
+class InterviewNote:
+    id: int
+    application_id: int
+    author_id: Optional[int]
+    author_username: Optional[str]
+    category: str
+    content: str
+    created_at: int
 
 
 @dataclass(frozen=True)

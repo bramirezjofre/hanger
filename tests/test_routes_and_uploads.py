@@ -224,6 +224,54 @@ def test_admin_role_is_required_and_audited(app, client, csrf):
     assert audit["action"] == "invitation.create"
 
 
+def test_admin_can_schedule_interview_and_assigned_interviewer_reads_notes(
+    app, client, csrf
+):
+    create_user(app, "admin", role="admin")
+    create_user(app, "interviewer")
+    create_user(app, "outsider")
+    application, created = app.extensions["hanger"]["applications"].submit(
+        "guest", "guest@example.com", "email"
+    )
+    assert created
+    assert application is not None
+
+    csrf = login(client, csrf, "admin")
+    scheduled = client.post(
+        f"/admin/applications/{application.id}/interview",
+        data={
+            "csrf_token": csrf,
+            "interviewer": "interviewer",
+            "contact_method": "video",
+            "preferred_times": "weekday afternoons",
+        },
+    )
+    assert scheduled.status_code == 200
+
+    listed = client.get("/admin/applications?interview_status=scheduled")
+    assert listed.status_code == 200
+    assert listed.get_json()["applications"][0]["interviewer_username"] == "interviewer"
+
+    csrf = login(client, csrf, "interviewer")
+    added = client.post(
+        f"/admin/applications/{application.id}/interview-notes",
+        data={
+            "csrf_token": csrf,
+            "category": "fit",
+            "content": "Good match for early research.",
+        },
+    )
+    assert added.status_code == 201
+
+    notes = client.get(f"/admin/applications/{application.id}/interview-notes")
+    assert notes.status_code == 200
+    assert notes.get_json()["notes"][0]["category"] == "fit"
+
+    csrf = login(client, csrf, "outsider")
+    denied = client.get(f"/admin/applications/{application.id}/interview-notes")
+    assert denied.status_code == 403
+
+
 def test_missing_posts_return_404_and_duplicate_like_returns_409(app, client, csrf):
     create_user(app, "alice")
     csrf = login(client, csrf, "alice")
