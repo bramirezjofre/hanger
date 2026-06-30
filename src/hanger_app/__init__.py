@@ -56,7 +56,7 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
     posts = PostRepository(database)
     audit = AuditRepository(database)
     invitations = InvitationService(invitation_repository, jobs)
-    applications = ApplicationService(application_repository, invitations)
+    applications = ApplicationService(application_repository, invitations, audit)
     installation_settings = InstallationSettingsService(
         installation_settings_repository
     )
@@ -173,13 +173,21 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
         ),
         default=None,
     )
-    def review_applications(status: Optional[str]) -> None:
-        for application in applications.list_all(status):
+    @click.option(
+        "--interview-status",
+        type=click.Choice(["not_scheduled", "scheduled", "completed", "cancelled"]),
+        default=None,
+    )
+    def review_applications(
+        status: Optional[str], interview_status: Optional[str]
+    ) -> None:
+        for application in applications.list_all(status, interview_status):
             click.echo(
                 "\t".join(
                     [
                         str(application.id),
                         application.status,
+                        application.interview_status,
                         application.contact_kind,
                         application.contact_address,
                         application.username or "",
@@ -194,9 +202,12 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
     def accept_application(
         application_id: int, reviewer: str, notes: Optional[str]
     ) -> None:
-        if not applications.accept(application_id, reviewer, notes):
+        try:
+            accepted = applications.accept(application_id, reviewer, notes)
+        except PermissionError as error:
+            raise click.ClickException(str(error)) from error
+        if not accepted:
             raise click.ClickException("Application not found")
-        audit.record(reviewer, "application.accept", str(application_id))
         click.echo(f"Application accepted: {application_id}")
 
     @app.cli.command("reject-application")
@@ -206,9 +217,12 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
     def reject_application(
         application_id: int, reviewer: str, notes: Optional[str]
     ) -> None:
-        if not applications.reject(application_id, reviewer, notes):
+        try:
+            rejected = applications.reject(application_id, reviewer, notes)
+        except PermissionError as error:
+            raise click.ClickException(str(error)) from error
+        if not rejected:
             raise click.ClickException("Application not found")
-        audit.record(reviewer, "application.reject", str(application_id))
         click.echo(f"Application rejected: {application_id}")
 
     @app.cli.command("invite-application")
@@ -221,14 +235,99 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
                 reviewer,
                 f"{app.config['PUBLIC_URL']}/register",
             )
-        except LookupError as error:
-            raise click.ClickException(str(error)) from error
-        except ValueError as error:
+        except (LookupError, PermissionError, ValueError) as error:
             raise click.ClickException(str(error)) from error
         if not created:
             raise click.ClickException("Invitation already exists")
-        audit.record(reviewer, "application.invite", str(application_id))
         click.echo(f"Invitation queued for application: {application_id}")
+
+    @app.cli.command("schedule-interview")
+    @click.argument("application_id", type=int)
+    @click.option("--reviewer", prompt=True)
+    @click.option("--interviewer", prompt=True)
+    @click.option(
+        "--contact-method",
+        prompt=True,
+        type=click.Choice(["email", "mail", "phone", "sms", "tel", "video"]),
+    )
+    @click.option("--preferred-times", prompt=True)
+    def schedule_interview(
+        application_id: int,
+        reviewer: str,
+        interviewer: str,
+        contact_method: str,
+        preferred_times: str,
+    ) -> None:
+        try:
+            updated = applications.schedule_interview(
+                application_id,
+                reviewer,
+                contact_method,
+                preferred_times,
+                interviewer,
+            )
+        except ValueError as error:
+            raise click.ClickException(str(error)) from error
+        if not updated:
+            raise click.ClickException(
+                "Application, reviewer, or interviewer not found"
+            )
+        click.echo(f"Interview scheduled for application: {application_id}")
+
+    @app.cli.command("complete-interview")
+    @click.argument("application_id", type=int)
+    @click.option("--actor", prompt=True)
+    def complete_interview(application_id: int, actor: str) -> None:
+        if not applications.complete_interview(application_id, actor):
+            raise click.ClickException("Application not found or access denied")
+        click.echo(f"Interview completed for application: {application_id}")
+
+    @app.cli.command("add-interview-note")
+    @click.argument("application_id", type=int)
+    @click.option("--author", prompt=True)
+    @click.option(
+        "--category",
+        prompt=True,
+        type=click.Choice(["motivation", "fit", "risks", "follow_up"]),
+    )
+    @click.option("--content", prompt=True)
+    def add_interview_note(
+        application_id: int,
+        author: str,
+        category: str,
+        content: str,
+    ) -> None:
+        try:
+            note = applications.add_interview_note(
+                application_id, author, category, content
+            )
+        except (PermissionError, ValueError) as error:
+            raise click.ClickException(str(error)) from error
+        click.echo(f"Interview note added: {note.id}")
+
+    @app.cli.command("list-interview-notes")
+    @click.argument("application_id", type=int)
+    @click.option("--requester", prompt=True)
+    def list_interview_notes(application_id: int, requester: str) -> None:
+        try:
+            notes = applications.list_interview_notes(application_id, requester)
+        except PermissionError as error:
+            raise click.ClickException(str(error)) from error
+        for note in notes:
+            click.echo(
+                "\t".join(
+                    [
+                        str(note.id),
+                        note.category,
+                        note.author_username or "",
+                        note.content,
+                    ]
+                )
+            )
+
+    @app.cli.command("research-export")
+    def research_export() -> None:
+        click.echo(json_dumps(applications.research_metrics()))
 
     @app.cli.command("set-role")
     @click.argument("username")

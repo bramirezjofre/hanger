@@ -26,6 +26,9 @@ Run `poetry run flask --app hanger_app:create_app process-jobs --watch` to proce
 Use `poetry run flask --app hanger_app:create_app settings-list` and
 `settings-set <key> <json-value>` to manage per-installation settings such as
 `branding.site_name` or `eligibility.minimum_age`.
+Use `schedule-interview`, `add-interview-note`, `list-interview-notes`, and
+`research-export` for the applicant interview pipeline and sanitized research
+metrics.
 
 ## Coding Style & Naming Conventions
 

@@ -5,7 +5,15 @@ import uuid
 from typing import Optional
 
 from .db import Database
-from .models import Application, InstallationSetting, Job, Message, Post, User
+from .models import (
+    Application,
+    InstallationSetting,
+    InterviewNote,
+    Job,
+    Message,
+    Post,
+    User,
+)
 
 
 class UserRepository:
@@ -223,6 +231,8 @@ class ApplicationRepository:
         "rejected",
         "invited",
     }
+    INTERVIEW_STATUSES = {"not_scheduled", "scheduled", "completed", "cancelled"}
+    INTERVIEW_NOTE_CATEGORIES = {"motivation", "fit", "risks", "follow_up"}
 
     def __init__(self, database: Database):
         self.database = database
@@ -232,6 +242,18 @@ class ApplicationRepository:
         data = dict(row)
         data["answers"] = json.loads(data.pop("answers_json"))
         return Application(**data)
+
+    @staticmethod
+    def _note_from_row(row: sqlite3.Row) -> InterviewNote:
+        return InterviewNote(**dict(row))
+
+    def is_admin(self, username: str) -> bool:
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM users WHERE username = ? AND role = 'admin'",
+                (username,),
+            ).fetchone()
+        return row is not None
 
     def create(
         self,
@@ -257,10 +279,20 @@ class ApplicationRepository:
                 )
                 row = connection.execute(
                     """
-                    SELECT id, username, contact_address, contact_kind,
-                           answers_json, reviewer_notes, reviewer_id, status,
-                           decided_at, created_at, updated_at
-                    FROM applications WHERE id = ?
+                    SELECT application.id, application.username,
+                           application.contact_address, application.contact_kind,
+                           application.answers_json, application.reviewer_notes,
+                           application.reviewer_id, application.status,
+                           application.interview_contact_method,
+                           application.interview_preferred_times,
+                           application.interviewer_id,
+                           interviewer.username AS interviewer_username,
+                           application.interview_status, application.decided_at,
+                           application.created_at, application.updated_at
+                    FROM applications AS application
+                    LEFT JOIN users AS interviewer
+                        ON interviewer.id = application.interviewer_id
+                    WHERE application.id = ?
                     """,
                     (cursor.lastrowid,),
                 ).fetchone()
@@ -272,32 +304,61 @@ class ApplicationRepository:
         with self.database.transaction() as connection:
             row = connection.execute(
                 """
-                SELECT id, username, contact_address, contact_kind, answers_json,
-                       reviewer_notes, reviewer_id, status, decided_at, created_at,
-                       updated_at
-                FROM applications WHERE id = ?
+                SELECT application.id, application.username,
+                       application.contact_address, application.contact_kind,
+                       application.answers_json, application.reviewer_notes,
+                       application.reviewer_id, application.status,
+                       application.interview_contact_method,
+                       application.interview_preferred_times,
+                       application.interviewer_id,
+                       interviewer.username AS interviewer_username,
+                       application.interview_status, application.decided_at,
+                       application.created_at, application.updated_at
+                FROM applications AS application
+                LEFT JOIN users AS interviewer
+                    ON interviewer.id = application.interviewer_id
+                WHERE application.id = ?
                 """,
                 (application_id,),
             ).fetchone()
         return self._application_from_row(row) if row else None
 
-    def list_all(self, status: Optional[str] = None) -> list[Application]:
+    def list_all(
+        self,
+        status: Optional[str] = None,
+        interview_status: Optional[str] = None,
+    ) -> list[Application]:
         parameters: tuple = ()
-        where = ""
+        clauses = []
         if status:
             if status not in self.VALID_STATUSES:
                 raise ValueError("Unsupported application status")
-            where = "WHERE status = ?"
-            parameters = (status,)
+            clauses.append("application.status = ?")
+            parameters = (*parameters, status)
+        if interview_status:
+            if interview_status not in self.INTERVIEW_STATUSES:
+                raise ValueError("Unsupported interview status")
+            clauses.append("application.interview_status = ?")
+            parameters = (*parameters, interview_status)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         with self.database.transaction() as connection:
             rows = connection.execute(
                 f"""
-                SELECT id, username, contact_address, contact_kind, answers_json,
-                       reviewer_notes, reviewer_id, status, decided_at, created_at,
-                       updated_at
-                FROM applications
+                SELECT application.id, application.username,
+                       application.contact_address, application.contact_kind,
+                       application.answers_json, application.reviewer_notes,
+                       application.reviewer_id, application.status,
+                       application.interview_contact_method,
+                       application.interview_preferred_times,
+                       application.interviewer_id,
+                       interviewer.username AS interviewer_username,
+                       application.interview_status, application.decided_at,
+                       application.created_at, application.updated_at
+                FROM applications AS application
+                LEFT JOIN users AS interviewer
+                    ON interviewer.id = application.interviewer_id
                 {where}
-                ORDER BY id DESC
+                ORDER BY application.id DESC
                 """,
                 parameters,
             ).fetchall()
@@ -325,10 +386,198 @@ class ApplicationRepository:
                     decided_at = {decided_at},
                     updated_at = unixepoch()
                 WHERE id = ?
+                    AND EXISTS (
+                        SELECT 1 FROM users
+                        WHERE username = ? AND role = 'admin'
+                    )
                 """,
-                (status, notes, reviewer_username, application_id),
+                (status, notes, reviewer_username, application_id, reviewer_username),
             )
         return result.rowcount == 1
+
+    def schedule_interview(
+        self,
+        application_id: int,
+        reviewer_username: str,
+        contact_method: str,
+        preferred_times: str,
+        interviewer_username: str,
+    ) -> bool:
+        with self.database.transaction() as connection:
+            result = connection.execute(
+                """
+                UPDATE applications
+                SET status = 'interview',
+                    interview_contact_method = ?,
+                    interview_preferred_times = ?,
+                    interviewer_id = (
+                        SELECT id FROM users WHERE username = ?
+                    ),
+                    interview_status = 'scheduled',
+                    reviewer_id = (
+                        SELECT id FROM users WHERE username = ?
+                    ),
+                    updated_at = unixepoch()
+                WHERE id = ?
+                    AND EXISTS (
+                        SELECT 1 FROM users
+                        WHERE username = ? AND role = 'admin'
+                    )
+                    AND EXISTS (
+                        SELECT 1 FROM users
+                        WHERE username = ?
+                    )
+                """,
+                (
+                    contact_method,
+                    preferred_times,
+                    interviewer_username,
+                    reviewer_username,
+                    application_id,
+                    reviewer_username,
+                    interviewer_username,
+                ),
+            )
+        return result.rowcount == 1
+
+    def complete_interview(self, application_id: int, actor_username: str) -> bool:
+        with self.database.transaction() as connection:
+            result = connection.execute(
+                """
+                UPDATE applications
+                SET interview_status = 'completed',
+                    updated_at = unixepoch()
+                WHERE id = ?
+                    AND EXISTS (
+                        SELECT 1
+                        FROM users
+                        WHERE username = ?
+                            AND (
+                                role = 'admin'
+                                OR id = applications.interviewer_id
+                            )
+                    )
+                """,
+                (application_id, actor_username),
+            )
+        return result.rowcount == 1
+
+    def can_access_interview_notes(
+        self, application_id: int, username: str
+    ) -> bool:
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM applications AS application
+                JOIN users AS user ON user.username = ?
+                WHERE application.id = ?
+                    AND (
+                        user.role = 'admin'
+                        OR user.id = application.interviewer_id
+                    )
+                """,
+                (username, application_id),
+            ).fetchone()
+        return row is not None
+
+    def add_interview_note(
+        self,
+        application_id: int,
+        author_username: str,
+        category: str,
+        content: str,
+    ) -> Optional[InterviewNote]:
+        if category not in self.INTERVIEW_NOTE_CATEGORIES:
+            raise ValueError("Unsupported interview note category")
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO interview_notes
+                    (application_id, author_id, category, content)
+                SELECT application.id, user.id, ?, ?
+                FROM applications AS application
+                JOIN users AS user ON user.username = ?
+                WHERE application.id = ?
+                    AND (
+                        user.role = 'admin'
+                        OR user.id = application.interviewer_id
+                    )
+                """,
+                (category, content, author_username, application_id),
+            )
+            if cursor.rowcount != 1:
+                return None
+            row = connection.execute(
+                """
+                SELECT note.id, note.application_id, note.author_id,
+                       user.username AS author_username, note.category,
+                       note.content, note.created_at
+                FROM interview_notes AS note
+                LEFT JOIN users AS user ON user.id = note.author_id
+                WHERE note.id = ?
+                """,
+                (cursor.lastrowid,),
+            ).fetchone()
+        return self._note_from_row(row)
+
+    def list_interview_notes(
+        self, application_id: int, requester_username: str
+    ) -> list[InterviewNote]:
+        if not self.can_access_interview_notes(application_id, requester_username):
+            raise PermissionError("Interview notes are restricted")
+        with self.database.transaction() as connection:
+            rows = connection.execute(
+                """
+                SELECT note.id, note.application_id, note.author_id,
+                       user.username AS author_username, note.category,
+                       note.content, note.created_at
+                FROM interview_notes AS note
+                LEFT JOIN users AS user ON user.id = note.author_id
+                WHERE note.application_id = ?
+                ORDER BY note.id
+                """,
+                (application_id,),
+            ).fetchall()
+        return [self._note_from_row(row) for row in rows]
+
+    def research_metrics(self) -> dict:
+        with self.database.transaction() as connection:
+            application_statuses = {
+                row["status"]: row["total"]
+                for row in connection.execute(
+                    """
+                    SELECT status, COUNT(*) AS total
+                    FROM applications
+                    GROUP BY status
+                    """
+                )
+            }
+            interview_statuses = {
+                row["interview_status"]: row["total"]
+                for row in connection.execute(
+                    """
+                    SELECT interview_status, COUNT(*) AS total
+                    FROM applications
+                    GROUP BY interview_status
+                    """
+                )
+            }
+            note_categories = {
+                row["category"]: row["total"]
+                for row in connection.execute(
+                    """
+                    SELECT category, COUNT(*) AS total
+                    FROM interview_notes
+                    GROUP BY category
+                    """
+                )
+            }
+        return {
+            "applications_by_status": application_statuses,
+            "interviews_by_status": interview_statuses,
+            "interview_notes_by_category": note_categories,
+        }
 
 
 class InstallationSettingsRepository:

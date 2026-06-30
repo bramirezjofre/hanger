@@ -7,9 +7,10 @@ from email.message import EmailMessage
 from typing import Optional
 from urllib.parse import urlencode
 
-from .models import Application, User
+from .models import Application, InterviewNote, User
 from .repositories import (
     ApplicationRepository,
+    AuditRepository,
     InstallationSettingsRepository,
     InvitationRepository,
     JobRepository,
@@ -188,9 +189,11 @@ class ApplicationService:
         self,
         applications: ApplicationRepository,
         invitations: InvitationService,
+        audit: AuditRepository,
     ):
         self.applications = applications
         self.invitations = invitations
+        self.audit = audit
 
     @staticmethod
     def _normalize_contact(address: str, kind: str) -> tuple[str, str]:
@@ -225,26 +228,46 @@ class ApplicationService:
         normalized_username = username.strip() if username else None
         return self.applications.create(normalized_username, address, kind, answers)
 
-    def list_all(self, status: Optional[str] = None) -> list[Application]:
-        return self.applications.list_all(status)
+    def list_all(
+        self,
+        status: Optional[str] = None,
+        interview_status: Optional[str] = None,
+    ) -> list[Application]:
+        return self.applications.list_all(status, interview_status)
 
     def accept(
         self, application_id: int, reviewer_username: str, notes: Optional[str] = None
     ) -> bool:
-        return self.applications.transition(
+        if not self.applications.is_admin(reviewer_username.strip()):
+            raise PermissionError("Application decisions require an admin reviewer")
+        updated = self.applications.transition(
             application_id, "accepted", reviewer_username, notes
         )
+        if updated:
+            self.audit.record(
+                reviewer_username, "application.accept", str(application_id)
+            )
+        return updated
 
     def reject(
         self, application_id: int, reviewer_username: str, notes: Optional[str] = None
     ) -> bool:
-        return self.applications.transition(
+        if not self.applications.is_admin(reviewer_username.strip()):
+            raise PermissionError("Application decisions require an admin reviewer")
+        updated = self.applications.transition(
             application_id, "rejected", reviewer_username, notes
         )
+        if updated:
+            self.audit.record(
+                reviewer_username, "application.reject", str(application_id)
+            )
+        return updated
 
     def invite(
         self, application_id: int, reviewer_username: str, registration_url: str
     ) -> bool:
+        if not self.applications.is_admin(reviewer_username.strip()):
+            raise PermissionError("Application invitations require an admin reviewer")
         application = self.applications.get(application_id)
         if application is None:
             raise LookupError("Application not found")
@@ -260,7 +283,84 @@ class ApplicationService:
         )
         if created:
             self.applications.transition(application.id, "invited", reviewer_username)
+            self.audit.record(
+                reviewer_username, "application.invite", str(application_id)
+            )
         return created
+
+    def schedule_interview(
+        self,
+        application_id: int,
+        reviewer_username: str,
+        contact_method: str,
+        preferred_times: str,
+        interviewer_username: str,
+    ) -> bool:
+        normalized_method = contact_method.strip().lower()
+        if normalized_method not in {"email", "mail", "phone", "sms", "tel", "video"}:
+            raise ValueError("Unsupported interview contact method")
+        normalized_times = preferred_times.strip()
+        if not normalized_times:
+            raise ValueError("Preferred times are required")
+        if len(normalized_times) > 2000:
+            raise ValueError("Preferred times must be 2000 characters or fewer")
+        updated = self.applications.schedule_interview(
+            application_id,
+            reviewer_username.strip(),
+            normalized_method,
+            normalized_times,
+            interviewer_username.strip(),
+        )
+        if updated:
+            self.audit.record(
+                reviewer_username, "application.interview.schedule", str(application_id)
+            )
+        return updated
+
+    def complete_interview(self, application_id: int, actor_username: str) -> bool:
+        updated = self.applications.complete_interview(
+            application_id, actor_username.strip()
+        )
+        if updated:
+            self.audit.record(
+                actor_username, "application.interview.complete", str(application_id)
+            )
+        return updated
+
+    def add_interview_note(
+        self,
+        application_id: int,
+        author_username: str,
+        category: str,
+        content: str,
+    ) -> InterviewNote:
+        normalized_content = content.strip()
+        if not normalized_content:
+            raise ValueError("Interview note content is required")
+        if len(normalized_content) > 4000:
+            raise ValueError("Interview note content must be 4000 characters or fewer")
+        note = self.applications.add_interview_note(
+            application_id,
+            author_username.strip(),
+            category.strip().lower(),
+            normalized_content,
+        )
+        if note is None:
+            raise PermissionError("Interview notes are restricted")
+        self.audit.record(
+            author_username, "application.interview.note.create", str(application_id)
+        )
+        return note
+
+    def list_interview_notes(
+        self, application_id: int, requester_username: str
+    ) -> list[InterviewNote]:
+        return self.applications.list_interview_notes(
+            application_id, requester_username.strip()
+        )
+
+    def research_metrics(self) -> dict:
+        return self.applications.research_metrics()
 
 
 class InstallationSettingsService:

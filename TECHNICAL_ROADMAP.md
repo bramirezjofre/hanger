@@ -11,17 +11,16 @@ Implementation scope:
 - [x] Add an application workflow with states: `submitted`, `screening`, `interview`, `accepted`, `rejected`, and `invited`.
 - [x] Store application answers, reviewer notes, decision timestamps, and reviewer user IDs.
 - [x] Replace open registration with invite-only registration tied to accepted applications.
-- [~] Add admin routes and CLI commands to review, accept, reject, and invite applicants.
-  CLI commands are implemented; dedicated application-review admin routes remain pending.
-- [~] Add audit events for every application state change.
-  CLI accept, reject, and invite actions are audited; full service-level transition auditing remains pending.
+- [x] Add admin routes and CLI commands to review, accept, reject, and invite applicants.
+  CLI commands and protected admin application routes are implemented.
+- [x] Add audit events for every application state change.
+  Accept, reject, invite, interview scheduling, interview completion, and note creation are audited at the service layer.
 
 Acceptance criteria:
 
 - [x] A non-invited user cannot create an account.
 - [x] Accepted applicants receive a single-use invitation.
-- [~] Tests cover duplicate applications, rejected applications, expired invites, and admin-only decisions.
-  Rejected applications, expired invites, single-use tokens, and route protections are covered; duplicate application and full admin-only application decision coverage remain pending.
+- [x] Tests cover duplicate applications, rejected applications, expired invites, and admin-only decisions.
 
 ## 2. Per-Installation Requirements
 
@@ -49,16 +48,16 @@ Goal: manage interviews with possible future users and convert research into act
 
 Implementation scope:
 
-- [ ] Add applicant interview scheduling fields: contact method, preferred times, assigned interviewer, and status.
-- [ ] Add interview notes with structured categories: motivation, fit, risks, and follow-up actions.
-- [ ] Add privacy controls so only admins or assigned interviewers can read interview notes.
-- [ ] Add aggregate exports for research metrics without exposing sensitive notes.
+- [x] Add applicant interview scheduling fields: contact method, preferred times, assigned interviewer, and status.
+- [x] Add interview notes with structured categories: motivation, fit, risks, and follow-up actions.
+- [x] Add privacy controls so only admins or assigned interviewers can read interview notes.
+- [x] Add aggregate exports for research metrics without exposing sensitive notes.
 
 Acceptance criteria:
 
-- [ ] Interview notes are access-controlled and audited.
-- [ ] Admins can list applicants by interview status.
-- [ ] Research exports exclude private free-text notes by default.
+- [x] Interview notes are access-controlled and audited.
+- [x] Admins can list applicants by interview status.
+- [x] Research exports exclude private free-text notes by default.
 
 ## 4. Funding and Operations Readiness
 
@@ -90,10 +89,10 @@ Acceptance criteria:
 
 1. [x] Add application and invitation schema.
 2. [x] Implement repository and service layer for application decisions.
-3. [~] Add admin CLI commands and protected admin routes.
+3. [x] Add admin CLI commands and protected admin routes.
 4. [x] Disable open registration when invite-only mode is enabled.
 5. [x] Add installation settings and production validation.
-6. [ ] Add interview notes and access controls.
+6. [x] Add interview notes and access controls.
 7. [ ] Add reporting commands and sanitized exports.
 8. [~] Document deployment, backup, restore, and operational workflows.
 

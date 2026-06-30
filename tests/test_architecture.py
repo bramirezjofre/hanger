@@ -67,7 +67,7 @@ def test_migrations_are_idempotent(app):
         applied = connection.execute(
             "SELECT COUNT(*) FROM schema_migrations"
         ).fetchone()[0]
-    assert applied == 4
+    assert applied == 5
 
 
 def test_operational_cli_commands(app):

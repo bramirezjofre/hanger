@@ -49,6 +49,22 @@ def _limit(action: str, limit: int, window_seconds: int) -> None:
         abort(429)
 
 
+def _application_json(application) -> dict:
+    return {
+        "id": application.id,
+        "username": application.username,
+        "contact_address": application.contact_address,
+        "contact_kind": application.contact_kind,
+        "status": application.status,
+        "interview_contact_method": application.interview_contact_method,
+        "interview_preferred_times": application.interview_preferred_times,
+        "interviewer_username": application.interviewer_username,
+        "interview_status": application.interview_status,
+        "created_at": application.created_at,
+        "updated_at": application.updated_at,
+    }
+
+
 @bp.get("/")
 def index():
     posts = _services()["posts"].list_all()
@@ -163,6 +179,78 @@ def interviewer():
         except ValueError as error:
             return jsonify({"error": str(error)}), 400
     return jsonify({"invitations": _services()["invitation_repository"].list_all()})
+
+
+@bp.get("/admin/applications")
+def admin_applications():
+    _require_admin()
+    try:
+        applications = _services()["applications"].list_all(
+            request.args.get("status") or None,
+            request.args.get("interview_status") or None,
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    return jsonify({"applications": [_application_json(item) for item in applications]})
+
+
+@bp.post("/admin/applications/<int:application_id>/interview")
+def admin_schedule_interview(application_id: int):
+    admin = _require_admin()
+    try:
+        updated = _services()["applications"].schedule_interview(
+            application_id,
+            admin,
+            request.form.get("contact_method", ""),
+            request.form.get("preferred_times", ""),
+            request.form.get("interviewer", ""),
+        )
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    if not updated:
+        abort(404)
+    return jsonify({"status": "scheduled"})
+
+
+@bp.route(
+    "/admin/applications/<int:application_id>/interview-notes",
+    methods=["GET", "POST"],
+)
+def admin_interview_notes(application_id: int):
+    username = _require_login()
+    if request.method == "POST":
+        try:
+            note = _services()["applications"].add_interview_note(
+                application_id,
+                username,
+                request.form.get("category", ""),
+                request.form.get("content", ""),
+            )
+        except ValueError as error:
+            return jsonify({"error": str(error)}), 400
+        except PermissionError:
+            abort(403)
+        return jsonify({"id": note.id, "category": note.category}), 201
+    try:
+        notes = _services()["applications"].list_interview_notes(
+            application_id, username
+        )
+    except PermissionError:
+        abort(403)
+    return jsonify(
+        {
+            "notes": [
+                {
+                    "id": note.id,
+                    "category": note.category,
+                    "author_username": note.author_username,
+                    "content": note.content,
+                    "created_at": note.created_at,
+                }
+                for note in notes
+            ]
+        }
+    )
 
 
 @bp.post("/chatting")
