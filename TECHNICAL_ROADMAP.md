@@ -98,21 +98,3 @@ Acceptance criteria:
 8. [~] Document deployment, backup, restore, and operational workflows.
 
 ## Spanish Summary
-
-Esta hoja de ruta traduce las ideas de `ROADMAP.md` en trabajo técnico concreto para `hanger_app`.
-
-### 1. Registro controlado de usuarios
-
-Solo deben registrarse usuarios que pasen un proceso de selección. Para lograrlo, el proyecto necesita solicitudes de ingreso, estados de revisión, invitaciones de un solo uso, rutas administrativas, comandos CLI y auditoría de cada decisión.
-
-### 2. Reglas por instalación
-
-Cada servidor debe poder definir sus propios criterios de elegibilidad, límites operativos y configuración sin modificar código. Esto requiere una tabla de configuración, validaciones al iniciar la aplicación y documentación clara para despliegues.
-
-### 3. Entrevistas e investigación
-
-El sistema debe ayudar a coordinar entrevistas con posibles usuarios, registrar notas estructuradas y proteger la información sensible. Los reportes deben entregar métricas agregadas sin exponer notas privadas.
-
-### 4. Preparación operacional y financiamiento
-
-El proyecto debe poder mostrar métricas de uso, salud del sistema y evidencia operacional para colaboración externa o financiamiento. También necesita mejores logs, políticas de retención y documentación de respaldo/restauración.
