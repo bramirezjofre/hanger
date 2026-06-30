@@ -26,7 +26,13 @@ class Settings:
         secret_key = values.get("HANGER_SECRET_KEY", "")
         if production and not secret_key:
             raise RuntimeError("HANGER_SECRET_KEY is required in production")
-        required_storage = ("HANGER_DB_PATH", "HANGER_UPLOAD_DIR", "HANGER_PUBLIC_URL")
+        required_storage = (
+            "HANGER_DB_PATH",
+            "HANGER_UPLOAD_DIR",
+            "HANGER_PUBLIC_URL",
+            "HANGER_REQUIRE_INVITATION",
+            "HANGER_MAX_UPLOAD_BYTES",
+        )
         missing = [
             name for name in required_storage if production and not values.get(name)
         ]
@@ -35,6 +41,10 @@ class Settings:
 
         instance_dir = Path(
             values.get("HANGER_INSTANCE_DIR", PROJECT_ROOT / "instance")
+        )
+        max_upload_bytes = cls._positive_int(
+            values.get("HANGER_MAX_UPLOAD_BYTES", str(5 * 1024 * 1024)),
+            "HANGER_MAX_UPLOAD_BYTES",
         )
         return cls(
             secret_key=secret_key or "development-only-secret",
@@ -53,7 +63,18 @@ class Settings:
                 "HANGER_REQUIRE_INVITATION", "true" if production else "false"
             ).lower()
             == "true",
+            max_upload_bytes=max_upload_bytes,
         )
+
+    @staticmethod
+    def _positive_int(value: str, name: str) -> int:
+        try:
+            parsed = int(value)
+        except ValueError as error:
+            raise RuntimeError(f"{name} must be a positive integer") from error
+        if parsed <= 0:
+            raise RuntimeError(f"{name} must be a positive integer")
+        return parsed
 
     def flask_config(self) -> dict:
         return {

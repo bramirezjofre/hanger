@@ -18,6 +18,14 @@ class Application:
 
 
 @dataclass(frozen=True)
+class InstallationSetting:
+    key: str
+    value: object
+    is_public: bool
+    updated_at: int
+
+
+@dataclass(frozen=True)
 class User:
     id: int
     username: str
